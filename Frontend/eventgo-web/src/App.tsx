@@ -1,3 +1,4 @@
+import AccountPanel from "./components/AccountPanel";
 import { useMemo, useState } from "react";
 
 type EventItem = {
@@ -168,6 +169,7 @@ export default function Home() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountName, setAccountName] = useState<string | null>(null);
   const [subscribed, setSubscribed] = useState(false);
   const [salesTab, setSalesTab] = useState<"week" | "month">("week");
 
@@ -202,8 +204,14 @@ export default function Home() {
           <nav className="desktop-actions" aria-label="Tài khoản">
             <a href="#organizer">Tạo sự kiện</a>
             <a href="#tickets"><Icon name="ticket" /> Vé của tôi</a>
-            <button className="account-button" onClick={() => setAccountOpen(true)}><Icon name="user" /> Đăng nhập</button>
           </nav>
+          <button
+            className="account-button"
+            onClick={() => setAccountOpen(true)}
+          >
+            <Icon name="user" />
+            {accountName ?? "Đăng nhập"}
+          </button>
           <button className="menu-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Mở menu" aria-expanded={menuOpen}><span /><span /></button>
         </div>
         <nav className="category-nav" aria-label="Danh mục sự kiện">
@@ -418,15 +426,18 @@ export default function Home() {
         </div>
       )}
 
-      {accountOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setAccountOpen(false)}>
-          <section className="login-modal" role="dialog" aria-modal="true" aria-label="Đăng nhập" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" onClick={() => setAccountOpen(false)} aria-label="Đóng">×</button>
-            <span className="brand-mark">E</span><p className="kicker">CHÀO MỪNG TRỞ LẠI</p><h2>Vé vui đang chờ bạn.</h2><p>Đây là bản demo giao diện. Form hoạt động tại frontend và không gửi dữ liệu đi.</p>
-            <form onSubmit={(event) => { event.preventDefault(); setAccountOpen(false); }}><label>Email</label><input type="email" required placeholder="ban@example.com" /><button className="button primary">Tiếp tục <Icon name="arrow" /></button></form>
-          </section>
-        </div>
-      )}
+      <AccountPanel
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        onUserChange={(name) => {
+          setAccountName(name);
+
+          if (name) {
+            setSelectedEvent(null);
+            setMenuOpen(false);
+          }
+        }}
+      />
     </main>
   );
 }
