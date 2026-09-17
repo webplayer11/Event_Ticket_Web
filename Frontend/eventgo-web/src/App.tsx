@@ -1,7 +1,8 @@
 import AccountPanel from "./components/AccountPanel";
 import RegisterPage from "./pages/RegisterPage";
+import AccountPage from "./pages/AccountPage";
+import AccountDropdown from "./components/account/AccountDropdown";
 import { useEffect, useMemo, useState } from "react";
-
 type EventItem = {
   id: number;
   title: string;
@@ -227,6 +228,22 @@ export default function Home() {
     );
   }
 
+  // Dedicated Account Page Route
+  if (currentPath === "/account") {
+    return (
+      <AccountPage
+        userName={accountName || ""}
+        userEmail={loginEmail || "user@example.com"}
+        currentPath={currentPath}
+        onNavigate={navigateTo}
+        onLogout={() => {
+          setAccountName(null);
+          navigateTo("/");
+        }}
+      />
+    );
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -261,13 +278,39 @@ export default function Home() {
               </button>
             )}
           </nav>
-          <button
-            className="account-button"
-            onClick={() => setAccountOpen(true)}
-          >
-            <Icon name="user" />
-            {accountName ?? "Đăng nhập"}
-          </button>
+          {accountName ? (
+            <div className="group relative flex items-center h-[56px] px-2">
+              <button
+                className="flex items-center gap-2 cursor-pointer font-medium text-white transition-opacity hover:opacity-80"
+              >
+                <Icon name="user" />
+                <span className="max-w-[100px] truncate">
+                  {accountName}
+                </span>
+                <svg className="shrink-0 mt-0.5 opacity-70" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+
+              {/* Added bridge to catch mouse */}
+              <div className="absolute top-full right-0 w-[240px] pt-2 invisible group-hover:visible translate-y-2 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all z-[100]">
+                <AccountDropdown
+                  onNavigate={(path) => {
+                    navigateTo(path);
+                  }}
+                  onLogout={() => {
+                    setAccountName(null);
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              className="account-button"
+              onClick={() => setAccountOpen(true)}
+            >
+              <Icon name="user" />
+              Đăng nhập
+            </button>
+          )}
           <button className="menu-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Mở menu" aria-expanded={menuOpen}><span /><span /></button>
         </div>
         <nav className="category-nav" aria-label="Danh mục sự kiện">
