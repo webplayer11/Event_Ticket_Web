@@ -1,4 +1,4 @@
-﻿using EventGO.Domain.Enums;
+using EventGO.Domain.Enums;
 
 namespace EventGO.Domain.Entities;
 
@@ -33,4 +33,7 @@ public class Order
     public DateTimeOffset? PaidAt { get; set; }
 
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    // Navigation properties
+    public List<OrderItem> Items { get; set; } = new();
 }

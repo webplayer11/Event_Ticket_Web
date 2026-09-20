@@ -1,4 +1,4 @@
-﻿using EventGO.Domain.Entities;
+using EventGO.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -32,8 +32,8 @@ public class OrderItemConfiguration
         builder.HasIndex(x => new { x.OrderId, x.TicketTypeId })
             .IsUnique();
 
-        builder.HasOne<Order>()
-            .WithMany()
+        builder.HasOne(x => x.Order)
+            .WithMany(x => x.Items)
             .HasForeignKey(x => x.OrderId)
             .OnDelete(DeleteBehavior.NoAction);
 
