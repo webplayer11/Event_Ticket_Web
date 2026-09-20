@@ -1,4 +1,4 @@
-﻿using EventGO.Domain.Enums;
+using EventGO.Domain.Enums;
 
 namespace EventGO.Domain.Entities;
 
@@ -20,4 +20,7 @@ public class Ticket
     public DateTimeOffset? UsedAt { get; set; }
 
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    // Navigation properties
+    public OrderItem OrderItem { get; set; } = null!;
 }
