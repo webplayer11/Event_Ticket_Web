@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using EventGO.Application.Authentication.Dtos;
 using EventGO.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -10,16 +11,24 @@ namespace EventGO.Infrastructure.Authentication;
 public class JwtTokenService
 {
     private readonly JwtOptions _options;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly TimeProvider _timeProvider;
 
-    public JwtTokenService(IOptions<JwtOptions> options)
+    public JwtTokenService(
+        IOptions<JwtOptions> options,
+        UserManager<ApplicationUser> userManager,
+        TimeProvider timeProvider)
     {
         _options = options.Value;
+        _userManager = userManager;
+        _timeProvider = timeProvider;
     }
 
-    public AuthResponse CreateToken(ApplicationUser user)
+    public async Task<AuthResponse> CreateTokenAsync(ApplicationUser user)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expiresAt = now.AddMinutes(_options.AccessTokenMinutes);
+        var roles = await _userManager.GetRolesAsync(user);
 
         var claims = new List<Claim>
         {
@@ -40,6 +49,14 @@ public class JwtTokenService
                 "security_stamp",
                 user.SecurityStamp ?? string.Empty)
         };
+
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+        }
+
+        claims.AddRange(roles.Select(role =>
+            new Claim(ClaimTypes.Role, role)));
 
         var signingKey = new SymmetricSecurityKey(
             Convert.FromBase64String(_options.SecretKey));
@@ -68,6 +85,8 @@ public class JwtTokenService
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email ?? string.Empty,
+                PhoneNumber = user.PhoneNumber,
+                SystemRoles = roles.Order(StringComparer.Ordinal).ToArray(),
                 CreatedAt = user.CreatedAt
             }
         };

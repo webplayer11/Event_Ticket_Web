@@ -54,7 +54,13 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<EventGoDbContext>()
+            .AddDefaultTokenProviders()
             .AddSignInManager();
+
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+        {
+            options.TokenLifespan = TimeSpan.FromHours(1);
+        });
 
         services
             .AddOptions<JwtOptions>()
@@ -108,6 +114,7 @@ public static class DependencyInjection
                             new[] { SecurityAlgorithms.HmacSha256 },
 
                         NameClaimType = JwtRegisteredClaimNames.Sub,
+                        RoleClaimType = ClaimTypes.Role,
                         ClockSkew = TimeSpan.FromSeconds(30)
                     };
 
@@ -150,7 +157,17 @@ public static class DependencyInjection
 
         services.AddScoped<JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<
+            IAccountAdministrationService,
+            AccountAdministrationService>();
+        services.AddScoped<
+            IPasswordResetEmailSender,
+            SmtpPasswordResetEmailSender>();
+        services.AddOptions<PasswordResetEmailOptions>()
+            .Bind(configuration.GetSection(
+                PasswordResetEmailOptions.SectionName));
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddSingleton(TimeProvider.System);
 
         return services;
     }
