@@ -1,4 +1,4 @@
-﻿namespace EventGO.Domain.Entities;
+namespace EventGO.Domain.Entities;
 
 public class OrderItem
 {
@@ -13,4 +13,8 @@ public class OrderItem
     public decimal UnitPrice { get; set; }
 
     public int Quantity { get; set; }
+
+    // Navigation properties
+    public Order Order { get; set; } = null!;
+    public List<Ticket> Tickets { get; set; } = new();
 }
