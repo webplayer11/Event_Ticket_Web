@@ -1,0 +1,3 @@
+# Local Docker image exports are reproducible deployment artifacts.
+*.tar
+*.tar.gz

@@ -1,6 +1,18 @@
-**/bin/
-**/obj/
-node_modules/
-.vs/
-.env
-.env.*
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Repository-wide temporary, backup, and log files
+*.tmp
+*.bak
+*.swp
+*.log
+
+# Local environment file placed directly at the repository root
+/.env
+
+# Root-only AI agent instructions and one-off prompts
+/RULES_CODEX.md
+/prompt1.md
+/prompt2.md
