@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using EventGO.Application.Authentication;
 using EventGO.Infrastructure;
 using Microsoft.OpenApi;
 
@@ -38,7 +39,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        AuthorizationPolicies.PlatformAdmin,
+        policy => policy.RequireRole(SystemRoles.PlatformAdmin));
+});
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -51,7 +57,7 @@ builder.Services.AddRateLimiter(options =>
             .ToString() ?? "unknown";
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: clientIp,
+            partitionKey: $"{clientIp}:{context.Request.Path}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -99,3 +105,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program;
