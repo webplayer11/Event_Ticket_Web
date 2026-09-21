@@ -33,6 +33,62 @@ public sealed class SqlServerReservationProcedureTests
         await VerifyTransitionsAsync(database);
     }
 
+    [Fact]
+    public async Task Concurrent_duplicate_create_mutates_inventory_once()
+    {
+        var serverConnection = Environment.GetEnvironmentVariable(
+            "EVENTGO_TEST_SQLSERVER");
+        if (string.IsNullOrWhiteSpace(serverConnection))
+        {
+            Assert.Skip(
+                "Set EVENTGO_TEST_SQLSERVER to an isolated SQL Server instance.");
+        }
+
+        await using var database =
+            await SqlServerProcedureTestDatabase.CreateAsync(serverConnection);
+        var inventoryId = await database.AddInventoryAsync("Idempotency zone", 10);
+        await using var contextA = database.CreateContext();
+        await using var contextB = database.CreateContext();
+        var serviceA = database.CreateReservationService(contextA);
+        var serviceB = database.CreateReservationService(contextB);
+        const string idempotencyKey = "concurrent-create-reservation";
+        var request = new CreateReservationRequest
+        {
+            EventId = database.EventId,
+            Items = [new CreateReservationItemRequest
+            {
+                TicketTypeId = inventoryId,
+                Quantity = 2
+            }]
+        };
+
+        var results = await Task.WhenAll(
+            serviceA.CreateAsync(database.UserId, idempotencyKey, request),
+            serviceB.CreateAsync(database.UserId, idempotencyKey, request));
+
+        Assert.All(results, result => Assert.Equal(ReservationError.None, result.Error));
+        Assert.Equal(results[0].Reservation!.Id, results[1].Reservation!.Id);
+        var reservationId = results[0].Reservation!.Id;
+
+        await using var assertionContext = database.CreateContext();
+        Assert.Equal(
+            1,
+            await assertionContext.Reservations.CountAsync(
+                x => x.UserId == database.UserId
+                    && x.IdempotencyKey == idempotencyKey));
+        Assert.Equal(
+            1,
+            await assertionContext.ReservationItems.CountAsync(
+                x => x.ReservationId == reservationId));
+        var inventory = await assertionContext.TicketTypes
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == inventoryId);
+        Assert.Equal(2, inventory.ReservedQuantity);
+        Assert.True(
+            inventory.ReservedQuantity + inventory.SoldQuantity
+                <= inventory.TotalQuantity);
+    }
+
     private static async Task VerifyConcurrentReserveAsync(
         SqlServerProcedureTestDatabase database)
     {
@@ -248,6 +304,8 @@ internal sealed class SqlServerProcedureTestDatabase : IAsyncDisposable
         {
             UserId = UserId,
             EventId = EventId,
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            RequestHash = new string('0', Reservation.RequestHashLength),
             Status = status,
             CreatedAt = Now.AddMinutes(-2),
             ExpiresAt = Now.Add(expiresIn)
@@ -280,6 +338,20 @@ internal sealed class SqlServerProcedureTestDatabase : IAsyncDisposable
                 """)
             .ToListAsync();
         Assert.Equal(4, names.Count);
+
+        var uniqueIndexExists = await context.Database
+            .SqlQueryRaw<int>(
+                """
+                SELECT CAST(CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE object_id = OBJECT_ID(N'dbo.Reservations')
+                      AND [name] = N'UX_Reservations_UserId_IdempotencyKey'
+                      AND is_unique = 1)
+                    THEN 1 ELSE 0 END AS int) AS [Value]
+                """)
+            .SingleAsync();
+        Assert.Equal(1, uniqueIndexExists);
     }
 
     public async ValueTask DisposeAsync()

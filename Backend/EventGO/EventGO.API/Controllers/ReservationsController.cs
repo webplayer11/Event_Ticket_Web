@@ -21,6 +21,7 @@ public sealed class ReservationsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(
         CreateReservationRequest request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -29,7 +30,7 @@ public sealed class ReservationsController : ControllerBase
         }
 
         var result = await _reservationService.CreateAsync(
-            userId, request, cancellationToken);
+            userId, idempotencyKey, request, cancellationToken);
 
         return result.Error == ReservationError.None
             ? StatusCode(StatusCodes.Status201Created, result.Reservation)
@@ -82,6 +83,10 @@ public sealed class ReservationsController : ControllerBase
         ReservationError.InvalidUser => Unauthorized(ApiError("UNAUTHENTICATED")),
         ReservationError.InventoryInsufficient =>
             Conflict(ApiError("INVENTORY_INSUFFICIENT")),
+        ReservationError.IdempotencyConflict =>
+            Conflict(ApiError("IDEMPOTENCY_KEY_REUSED")),
+        ReservationError.InvalidIdempotencyKey =>
+            BadRequest(ApiError("INVALID_IDEMPOTENCY_KEY")),
         ReservationError.ConcurrencyConflict =>
             Conflict(ApiError("INVENTORY_CONFLICT")),
         ReservationError.ConfigurationMissing =>
