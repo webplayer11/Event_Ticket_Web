@@ -12,6 +12,8 @@ public class Order
 
     public Guid EventId { get; set; }
 
+    public Guid ReservationId { get; set; }
+
     public string CustomerName { get; set; } = string.Empty;
 
     public string CustomerEmail { get; set; } = string.Empty;
@@ -33,7 +35,6 @@ public class Order
     public DateTimeOffset? PaidAt { get; set; }
 
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
-
     // Navigation properties
     public List<OrderItem> Items { get; set; } = new();
 }
