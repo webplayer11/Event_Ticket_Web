@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="EventGO.API/EventGO.API.csproj" />
+  <Project Path="EventGO.Application/EventGO.Application.csproj" />
+  <Project Path="EventGO.Domain/EventGO.Domain.csproj" />
+  <Project Path="EventGO.Infrastructure/EventGO.Infrastructure.csproj" />
+  <Project Path="EventGO.Tests/EventGO.Tests.csproj" />
+</Solution>
