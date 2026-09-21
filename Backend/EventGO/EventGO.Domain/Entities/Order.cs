@@ -12,6 +12,8 @@ public class Order
 
     public Guid EventId { get; set; }
 
+    public Guid ReservationId { get; set; }
+
     public string CustomerName { get; set; } = string.Empty;
 
     public string CustomerEmail { get; set; } = string.Empty;

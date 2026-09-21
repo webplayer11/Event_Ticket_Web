@@ -60,6 +60,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(x => x.OrderCode)
             .IsUnique();
 
+        builder.HasIndex(x => x.ReservationId)
+            .IsUnique();
+
         builder.HasIndex(x => new { x.UserId, x.CreatedAt });
 
         builder.HasIndex(x => new { x.Status, x.ExpiresAt });
@@ -72,6 +75,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasOne<Event>()
             .WithMany()
             .HasForeignKey(x => x.EventId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.HasOne<Reservation>()
+            .WithOne()
+            .HasForeignKey<Order>(x => x.ReservationId)
             .OnDelete(DeleteBehavior.NoAction);
     }
 }
