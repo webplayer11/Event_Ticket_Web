@@ -1,7 +1,11 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using EventGO.Application.Reservations;
 using EventGO.Domain.Entities;
 using EventGO.Domain.Enums;
 using EventGO.Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -29,12 +33,20 @@ public sealed class ReservationService
 
     public async Task<ReservationResult> CreateAsync(
         Guid userId,
+        string? idempotencyKey,
         CreateReservationRequest request,
         CancellationToken cancellationToken = default)
     {
         if (_options.Duration <= TimeSpan.Zero)
         {
             return new(ReservationError.ConfigurationMissing);
+        }
+
+        var normalizedIdempotencyKey = idempotencyKey?.Trim();
+        if (string.IsNullOrEmpty(normalizedIdempotencyKey)
+            || normalizedIdempotencyKey.Length > Reservation.IdempotencyKeyMaxLength)
+        {
+            return new(ReservationError.InvalidIdempotencyKey);
         }
 
         if (userId == Guid.Empty
@@ -52,6 +64,17 @@ public sealed class ReservationService
         if (!userIsActive)
         {
             return new(ReservationError.InvalidUser);
+        }
+
+        var requestHash = ComputeRequestHash(request);
+        var existingResult = await FindExistingAsync(
+            userId,
+            normalizedIdempotencyKey,
+            requestHash,
+            cancellationToken);
+        if (existingResult is not null)
+        {
+            return existingResult;
         }
 
         var now = _timeProvider.GetUtcNow();
@@ -90,12 +113,39 @@ public sealed class ReservationService
         {
             UserId = userId,
             EventId = request.EventId,
+            IdempotencyKey = normalizedIdempotencyKey,
+            RequestHash = requestHash,
             Status = ReservationStatus.Active,
             CreatedAt = now,
             ExpiresAt = now.Add(_options.Duration)
         };
 
         _dbContext.Reservations.Add(reservation);
+
+        try
+        {
+            // This insert is the transaction-scoped idempotency claim. The unique
+            // index serializes concurrent requests before inventory is mutated.
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsDuplicateKey(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+
+            var duplicateResult = await FindExistingAsync(
+                userId,
+                normalizedIdempotencyKey,
+                requestHash,
+                cancellationToken);
+
+            if (duplicateResult is null)
+            {
+                throw;
+            }
+
+            return duplicateResult;
+        }
 
         foreach (var item in request.Items.OrderBy(x => x.TicketTypeId))
         {
@@ -127,6 +177,63 @@ public sealed class ReservationService
 
         return new(ReservationError.None, Map(reservation, reservationItems));
     }
+
+    private async Task<ReservationResult?> FindExistingAsync(
+        Guid userId,
+        string idempotencyKey,
+        string requestHash,
+        CancellationToken cancellationToken)
+    {
+        var reservation = await _dbContext.Reservations
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.UserId == userId
+                    && x.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+
+        if (reservation is null)
+        {
+            return null;
+        }
+
+        if (!string.Equals(
+                reservation.RequestHash,
+                requestHash,
+                StringComparison.Ordinal))
+        {
+            return new(ReservationError.IdempotencyConflict);
+        }
+
+        var items = await _dbContext.ReservationItems
+            .AsNoTracking()
+            .Where(x => x.ReservationId == reservation.Id)
+            .OrderBy(x => x.TicketTypeId)
+            .ToListAsync(cancellationToken);
+
+        return new(ReservationError.None, Map(reservation, items));
+    }
+
+    private static string ComputeRequestHash(CreateReservationRequest request)
+    {
+        var canonicalPayload = new StringBuilder()
+            .Append(request.EventId.ToString("N"))
+            .Append('|');
+
+        foreach (var item in request.Items.OrderBy(x => x.TicketTypeId))
+        {
+            canonicalPayload
+                .Append(item.TicketTypeId.ToString("N"))
+                .Append(':')
+                .Append(item.Quantity.ToString(CultureInfo.InvariantCulture))
+                .Append(';');
+        }
+
+        return Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPayload.ToString())));
+    }
+
+    private static bool IsDuplicateKey(DbUpdateException exception) =>
+        exception.InnerException is SqlException { Number: 2601 or 2627 };
 
     public async Task<ReservationResult> GetAsync(
         Guid reservationId,

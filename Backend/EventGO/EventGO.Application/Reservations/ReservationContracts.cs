@@ -47,6 +47,8 @@ public enum ReservationError
     TicketTypeNotOnSale,
     QuantityLimitExceeded,
     InventoryInsufficient,
+    InvalidIdempotencyKey,
+    IdempotencyConflict,
     ConcurrencyConflict,
     NotFound,
     ConfigurationMissing
@@ -60,6 +62,7 @@ public interface IReservationService
 {
     Task<ReservationResult> CreateAsync(
         Guid userId,
+        string? idempotencyKey,
         CreateReservationRequest request,
         CancellationToken cancellationToken = default);
 

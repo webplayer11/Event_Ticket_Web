@@ -28,6 +28,7 @@ public sealed class ReservationFlowTests
 
         var created = await service.CreateAsync(
             database.UserId,
+            Key(),
             Request(database.EventId, database.TicketTypeId, 2));
 
         Assert.Equal(ReservationError.None, created.Error);
@@ -36,6 +37,7 @@ public sealed class ReservationFlowTests
 
         var rejected = await service.CreateAsync(
             database.UserId,
+            Key(),
             Request(database.EventId, database.TicketTypeId, 1));
 
         Assert.Equal(ReservationError.InventoryInsufficient, rejected.Error);
@@ -49,7 +51,7 @@ public sealed class ReservationFlowTests
         await using var context = database.CreateContext();
         var service = database.CreateReservationService(context);
         var created = await service.CreateAsync(
-            database.UserId, Request(database.EventId, database.TicketTypeId, 2));
+            database.UserId, Key(), Request(database.EventId, database.TicketTypeId, 2));
 
         var first = await service.CancelAsync(created.Reservation!.Id, database.UserId);
         var second = await service.CancelAsync(created.Reservation.Id, database.UserId);
@@ -67,7 +69,7 @@ public sealed class ReservationFlowTests
         await using var context = database.CreateContext();
         var service = database.CreateReservationService(context);
         var created = await service.CreateAsync(
-            database.UserId, Request(database.EventId, database.TicketTypeId, 2));
+            database.UserId, Key(), Request(database.EventId, database.TicketTypeId, 2));
         clock.Advance(TimeSpan.FromMinutes(6));
 
         var first = await service.ExpireDueAsync();
@@ -87,7 +89,7 @@ public sealed class ReservationFlowTests
         await using var context = database.CreateContext();
         var reservationService = database.CreateReservationService(context);
         var created = await reservationService.CreateAsync(
-            database.UserId, Request(database.EventId, database.TicketTypeId, 2));
+            database.UserId, Key(), Request(database.EventId, database.TicketTypeId, 2));
 
         await context.TicketTypes.ExecuteUpdateAsync(
             setters => setters.SetProperty(x => x.Price, 600_000m));
@@ -112,7 +114,7 @@ public sealed class ReservationFlowTests
         await using var database = await TestDatabase.CreateAsync();
         await using var context = database.CreateContext();
         var reservation = await database.CreateReservationService(context).CreateAsync(
-            database.UserId, Request(database.EventId, database.TicketTypeId, 2));
+            database.UserId, Key(), Request(database.EventId, database.TicketTypeId, 2));
         var order = await database.CreateOrderService(context).CreateAsync(
             database.UserId,
             new CreateOrderRequest
@@ -157,7 +159,7 @@ public sealed class ReservationFlowTests
         await using var database = await TestDatabase.CreateAsync(clock: clock);
         await using var setupContext = database.CreateContext();
         var reservation = await database.CreateReservationService(setupContext).CreateAsync(
-            database.UserId, Request(database.EventId, database.TicketTypeId, 2));
+            database.UserId, Key(), Request(database.EventId, database.TicketTypeId, 2));
         var order = await database.CreateOrderService(setupContext).CreateAsync(
             database.UserId,
             new CreateOrderRequest
@@ -216,9 +218,11 @@ public sealed class ReservationFlowTests
         var results = await Task.WhenAll(
             serviceA.CreateAsync(
                 database.UserId,
+                Key(),
                 Request(database.EventId, database.TicketTypeId, 1)),
             serviceB.CreateAsync(
                 database.UserId,
+                Key(),
                 Request(database.EventId, database.TicketTypeId, 1)));
 
         Assert.Single(results, x => x.Error == ReservationError.None);
@@ -254,6 +258,7 @@ public sealed class ReservationFlowTests
 
         var result = await database.CreateReservationService(context).CreateAsync(
             database.UserId,
+            Key(),
             new CreateReservationRequest
             {
                 EventId = database.EventId,
@@ -270,6 +275,162 @@ public sealed class ReservationFlowTests
             await context.TicketTypes.AsNoTracking().ToListAsync(),
             inventory => Assert.Equal(0, inventory.ReservedQuantity));
     }
+
+    [Fact]
+    public async Task Sequential_duplicate_returns_same_reservation_without_reserving_again()
+    {
+        await using var database = await TestDatabase.CreateAsync(totalQuantity: 10);
+        await using var context = database.CreateContext();
+        var service = database.CreateReservationService(context);
+        const string idempotencyKey = "sequential-duplicate";
+        var request = Request(database.EventId, database.TicketTypeId, 2);
+
+        var first = await service.CreateAsync(database.UserId, idempotencyKey, request);
+        var retry = await service.CreateAsync(database.UserId, idempotencyKey, request);
+
+        Assert.Equal(ReservationError.None, first.Error);
+        Assert.Equal(ReservationError.None, retry.Error);
+        Assert.Equal(first.Reservation!.Id, retry.Reservation!.Id);
+        Assert.Equal(1, await context.Reservations.CountAsync());
+        Assert.Equal(1, await context.ReservationItems.CountAsync());
+        Assert.Equal(
+            2,
+            await context.TicketTypes.Select(x => x.ReservedQuantity).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Missing_empty_or_oversized_idempotency_key_is_rejected()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var service = database.CreateReservationService(context);
+        var request = Request(database.EventId, database.TicketTypeId, 1);
+
+        var missing = await service.CreateAsync(database.UserId, null, request);
+        var empty = await service.CreateAsync(database.UserId, "   ", request);
+        var oversized = await service.CreateAsync(
+            database.UserId,
+            new string('x', Reservation.IdempotencyKeyMaxLength + 1),
+            request);
+
+        Assert.All(
+            new[] { missing, empty, oversized },
+            result => Assert.Equal(
+                ReservationError.InvalidIdempotencyKey,
+                result.Error));
+        Assert.Equal(0, await context.Reservations.CountAsync());
+        Assert.Equal(
+            0,
+            await context.TicketTypes.Select(x => x.ReservedQuantity).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Same_key_with_different_payload_is_rejected_without_side_effect()
+    {
+        await using var database = await TestDatabase.CreateAsync(totalQuantity: 10);
+        await using var context = database.CreateContext();
+        var service = database.CreateReservationService(context);
+        const string idempotencyKey = "payload-conflict";
+
+        var first = await service.CreateAsync(
+            database.UserId,
+            idempotencyKey,
+            Request(database.EventId, database.TicketTypeId, 2));
+        var conflict = await service.CreateAsync(
+            database.UserId,
+            idempotencyKey,
+            Request(database.EventId, database.TicketTypeId, 5));
+
+        Assert.Equal(ReservationError.None, first.Error);
+        Assert.Equal(ReservationError.IdempotencyConflict, conflict.Error);
+        Assert.Equal(1, await context.Reservations.CountAsync());
+        Assert.Equal(
+            2,
+            await context.TicketTypes.Select(x => x.ReservedQuantity).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Different_keys_and_same_key_for_different_users_are_independent()
+    {
+        await using var database = await TestDatabase.CreateAsync(totalQuantity: 10);
+        await using var context = database.CreateContext();
+        var secondUserId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser
+        {
+            Id = secondUserId,
+            UserName = "second-reservation-user",
+            NormalizedUserName = "SECOND-RESERVATION-USER",
+            Email = "second-reservation-user@example.com",
+            NormalizedEmail = "SECOND-RESERVATION-USER@EXAMPLE.COM",
+            FullName = "Second Reservation User",
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+        var service = database.CreateReservationService(context);
+        var request = Request(database.EventId, database.TicketTypeId, 1);
+
+        var first = await service.CreateAsync(database.UserId, "key-a", request);
+        var differentKey = await service.CreateAsync(database.UserId, "key-b", request);
+        var differentUser = await service.CreateAsync(secondUserId, "key-a", request);
+
+        Assert.All(
+            new[] { first, differentKey, differentUser },
+            result => Assert.Equal(ReservationError.None, result.Error));
+        Assert.Equal(3, await context.Reservations.CountAsync());
+        Assert.Equal(
+            3,
+            await context.TicketTypes.Select(x => x.ReservedQuantity).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Failed_multi_item_create_does_not_complete_idempotency_claim()
+    {
+        await using var database = await TestDatabase.CreateAsync(totalQuantity: 1);
+        await using var context = database.CreateContext();
+        var unavailableTicketTypeId = Guid.NewGuid();
+        context.TicketTypes.Add(new TicketType
+        {
+            Id = unavailableTicketTypeId,
+            EventId = database.EventId,
+            Name = "Temporarily unavailable zone",
+            Price = 300_000m,
+            Currency = "VND",
+            TotalQuantity = 0,
+            MaxQuantityPerOrder = 10,
+            SaleStartsAt = database.Clock.GetUtcNow().AddDays(-1),
+            SaleEndsAt = database.Clock.GetUtcNow().AddDays(1),
+            IsActive = true,
+            RowVersion = [1]
+        });
+        await context.SaveChangesAsync();
+        const string idempotencyKey = "retry-after-rollback";
+        var request = new CreateReservationRequest
+        {
+            EventId = database.EventId,
+            Items =
+            [
+                new() { TicketTypeId = database.TicketTypeId, Quantity = 1 },
+                new() { TicketTypeId = unavailableTicketTypeId, Quantity = 1 }
+            ]
+        };
+        var service = database.CreateReservationService(context);
+
+        var failed = await service.CreateAsync(database.UserId, idempotencyKey, request);
+        await context.TicketTypes
+            .Where(x => x.Id == unavailableTicketTypeId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TotalQuantity, 1));
+        var retry = await service.CreateAsync(database.UserId, idempotencyKey, request);
+
+        Assert.Equal(ReservationError.InventoryInsufficient, failed.Error);
+        Assert.Equal(ReservationError.None, retry.Error);
+        Assert.Equal(1, await context.Reservations.CountAsync());
+        Assert.Equal(2, await context.ReservationItems.CountAsync());
+        Assert.All(
+            await context.TicketTypes.AsNoTracking().ToListAsync(),
+            inventory => Assert.Equal(1, inventory.ReservedQuantity));
+    }
+
+    private static string Key() => Guid.NewGuid().ToString("N");
 
     private static CreateReservationRequest Request(Guid eventId, Guid ticketTypeId, int quantity) =>
         new()
