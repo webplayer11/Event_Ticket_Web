@@ -13,6 +13,12 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using EventGO.Application.Organizations;
 using EventGO.Infrastructure.Organizations;
+using EventGO.Application.Orders;
+using EventGO.Application.Payments;
+using EventGO.Application.Reservations;
+using EventGO.Infrastructure.Orders;
+using EventGO.Infrastructure.Payments;
+using EventGO.Infrastructure.Reservations;
 
 namespace EventGO.Infrastructure;
 
@@ -167,7 +173,18 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(
                 PasswordResetEmailOptions.SectionName));
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IReservationService, ReservationService>();
+        services.AddScoped<IReservationExpirationService, ReservationService>();
+        services.AddScoped<
+            IReservationDatabaseOperations,
+            SqlServerReservationDatabaseOperations>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IPaymentCompletionService, PaymentCompletionService>();
         services.AddSingleton(TimeProvider.System);
+
+        services.AddOptions<ReservationOptions>()
+            .Bind(configuration.GetSection(ReservationOptions.SectionName));
+        services.AddHostedService<ReservationExpirationWorker>();
 
         return services;
     }
