@@ -37,8 +37,10 @@ public class EventGoDbContext
 
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
-    public DbSet<TicketReservation> TicketReservations
-        => Set<TicketReservation>();
+    public DbSet<Reservation> Reservations => Set<Reservation>();
+
+    public DbSet<ReservationItem> ReservationItems
+        => Set<ReservationItem>();
 
     public DbSet<Payment> Payments => Set<Payment>();
 

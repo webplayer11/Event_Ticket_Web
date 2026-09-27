@@ -8,5 +8,10 @@ public class UserResponse
 
     public string Email { get; set; } = string.Empty;
 
+    public string? PhoneNumber { get; set; }
+
+    public IReadOnlyList<string> SystemRoles { get; set; }
+        = Array.Empty<string>();
+
     public DateTimeOffset CreatedAt { get; set; }
 }

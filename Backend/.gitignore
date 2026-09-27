@@ -1,0 +1,26 @@
+# .NET build and test output
+**/bin/
+**/obj/
+**/artifacts/
+**/TestResults/
+**/coverage/
+
+# Visual Studio, Rider, and user-specific project settings
+.vs/
+.idea/
+
+*.user
+*.suo
+*.rsuser
+
+# Backend-local logs
+*.log
+
+# Backend-local environment and override files
+.env
+.env.*
+!.env.example
+!*.env.example
+
+appsettings.Local.json
+appsettings.*.Local.json

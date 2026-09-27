@@ -335,6 +335,9 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("PaidAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -356,6 +359,9 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventId");
 
                     b.HasIndex("OrderCode")
+                        .IsUnique();
+
+                    b.HasIndex("ReservationId")
                         .IsUnique();
 
                     b.HasIndex("Status", "ExpiresAt");
@@ -561,6 +567,102 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EventGO.Domain.Entities.Reservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("char(64)")
+                        .IsFixedLength();
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("Status", "ExpiresAt");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Reservations_UserId_IdempotencyKey");
+
+                    b.ToTable("Reservations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Reservations_ExpiresAt", "[ExpiresAt] > [CreatedAt]");
+
+                            t.HasCheckConstraint("CK_Reservations_Status", "[Status] IN (0, 1, 2, 3)");
+                        });
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.ReservationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TicketTypeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("UnitPriceSnapshot")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketTypeId");
+
+                    b.HasIndex("ReservationId", "TicketTypeId")
+                        .IsUnique();
+
+                    b.ToTable("ReservationItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReservationItems_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_ReservationItems_UnitPriceSnapshot", "[UnitPriceSnapshot] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("EventGO.Domain.Entities.StoredFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -615,47 +717,9 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("QrTokenHash")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsRequired()
-                        .HasColumnType("varbinary(max)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TicketCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Tickets");
-                });
-
-            modelBuilder.Entity("EventGO.Domain.Entities.TicketReservation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset?>("ClosedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<Guid>("OrderItemId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -666,20 +730,28 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<string>("TicketCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderItemId")
+                    b.HasIndex("OrderItemId");
+
+                    b.HasIndex("QrTokenHash")
                         .IsUnique();
 
-                    b.HasIndex("Status", "ExpiresAt");
+                    b.HasIndex("TicketCode")
+                        .IsUnique();
 
-                    b.ToTable("TicketReservations", null, t =>
+                    b.ToTable("Tickets", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TicketReservations_ExpiresAt", "[ExpiresAt] > [CreatedAt]");
-
-                            t.HasCheckConstraint("CK_TicketReservations_Quantity", "[Quantity] > 0");
-
-                            t.HasCheckConstraint("CK_TicketReservations_Status", "[Status] IN (0, 1, 2, 3)");
+                            t.HasCheckConstraint("CK_Tickets_Status", "[Status] IN (0, 1, 2)");
                         });
                 });
 
@@ -765,10 +837,6 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
-                    b.Property<string>("AvatarUrl")
-                        .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)");
-
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -816,11 +884,6 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
-
-                    b.Property<string>("PreferencesJson")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
@@ -1077,6 +1140,12 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("EventGO.Domain.Entities.Reservation", null)
+                        .WithOne()
+                        .HasForeignKey("EventGO.Domain.Entities.Order", "ReservationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
                     b.HasOne("EventGO.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -1086,8 +1155,8 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("EventGO.Domain.Entities.OrderItem", b =>
                 {
-                    b.HasOne("EventGO.Domain.Entities.Order", null)
-                        .WithMany()
+                    b.HasOne("EventGO.Domain.Entities.Order", "Order")
+                        .WithMany("Items")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
@@ -1097,6 +1166,8 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TicketTypeId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.OrganizationMember", b =>
@@ -1123,13 +1194,45 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("EventGO.Domain.Entities.TicketReservation", b =>
+            modelBuilder.Entity("EventGO.Domain.Entities.Reservation", b =>
                 {
-                    b.HasOne("EventGO.Domain.Entities.OrderItem", null)
-                        .WithOne()
-                        .HasForeignKey("EventGO.Domain.Entities.TicketReservation", "OrderItemId")
+                    b.HasOne("EventGO.Domain.Entities.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.HasOne("EventGO.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.ReservationItem", b =>
+                {
+                    b.HasOne("EventGO.Domain.Entities.Reservation", null)
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("EventGO.Domain.Entities.TicketType", null)
+                        .WithMany()
+                        .HasForeignKey("TicketTypeId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.Ticket", b =>
+                {
+                    b.HasOne("EventGO.Domain.Entities.OrderItem", "OrderItem")
+                        .WithMany("Tickets")
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("OrderItem");
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.TicketType", b =>
@@ -1190,6 +1293,16 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.Order", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.OrderItem", b =>
+                {
+                    b.Navigation("Tickets");
                 });
 #pragma warning restore 612, 618
         }
