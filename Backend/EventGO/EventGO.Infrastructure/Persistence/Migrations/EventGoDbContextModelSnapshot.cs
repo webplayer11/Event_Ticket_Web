@@ -732,9 +732,9 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("TicketCode")
                         .IsRequired()
-                        .HasMaxLength(50)
+                        .HasMaxLength(20)
                         .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
+                        .HasColumnType("varchar(20)");
 
                     b.Property<DateTimeOffset?>("UsedAt")
                         .HasColumnType("datetimeoffset");
@@ -749,7 +749,10 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                     b.HasIndex("TicketCode")
                         .IsUnique();
 
-                    b.ToTable("Tickets", (string)null);
+                    b.ToTable("Tickets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Tickets_Status", "[Status] IN (0, 1, 2)");
+                        });
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.TicketType", b =>
@@ -1152,8 +1155,8 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("EventGO.Domain.Entities.OrderItem", b =>
                 {
-                    b.HasOne("EventGO.Domain.Entities.Order", null)
-                        .WithMany()
+                    b.HasOne("EventGO.Domain.Entities.Order", "Order")
+                        .WithMany("Items")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
@@ -1163,6 +1166,8 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TicketTypeId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.OrganizationMember", b =>
@@ -1221,11 +1226,13 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("EventGO.Domain.Entities.Ticket", b =>
                 {
-                    b.HasOne("EventGO.Domain.Entities.OrderItem", null)
-                        .WithMany()
+                    b.HasOne("EventGO.Domain.Entities.OrderItem", "OrderItem")
+                        .WithMany("Tickets")
                         .HasForeignKey("OrderItemId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.Navigation("OrderItem");
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.TicketType", b =>
@@ -1286,6 +1293,16 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.Order", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.OrderItem", b =>
+                {
+                    b.Navigation("Tickets");
                 });
 #pragma warning restore 612, 618
         }
