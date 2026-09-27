@@ -13,6 +13,12 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using EventGO.Application.Organizations;
 using EventGO.Infrastructure.Organizations;
+using EventGO.Application.Orders;
+using EventGO.Application.Payments;
+using EventGO.Application.Reservations;
+using EventGO.Infrastructure.Orders;
+using EventGO.Infrastructure.Payments;
+using EventGO.Infrastructure.Reservations;
 
 namespace EventGO.Infrastructure;
 
@@ -54,7 +60,13 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<EventGoDbContext>()
+            .AddDefaultTokenProviders()
             .AddSignInManager();
+
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+        {
+            options.TokenLifespan = TimeSpan.FromHours(1);
+        });
 
         services
             .AddOptions<JwtOptions>()
@@ -108,6 +120,7 @@ public static class DependencyInjection
                             new[] { SecurityAlgorithms.HmacSha256 },
 
                         NameClaimType = JwtRegisteredClaimNames.Sub,
+                        RoleClaimType = ClaimTypes.Role,
                         ClockSkew = TimeSpan.FromSeconds(30)
                     };
 
@@ -150,7 +163,28 @@ public static class DependencyInjection
 
         services.AddScoped<JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<
+            IAccountAdministrationService,
+            AccountAdministrationService>();
+        services.AddScoped<
+            IPasswordResetEmailSender,
+            SmtpPasswordResetEmailSender>();
+        services.AddOptions<PasswordResetEmailOptions>()
+            .Bind(configuration.GetSection(
+                PasswordResetEmailOptions.SectionName));
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IReservationService, ReservationService>();
+        services.AddScoped<IReservationExpirationService, ReservationService>();
+        services.AddScoped<
+            IReservationDatabaseOperations,
+            SqlServerReservationDatabaseOperations>();
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IPaymentCompletionService, PaymentCompletionService>();
+        services.AddSingleton(TimeProvider.System);
+
+        services.AddOptions<ReservationOptions>()
+            .Bind(configuration.GetSection(ReservationOptions.SectionName));
+        services.AddHostedService<ReservationExpirationWorker>();
 
         return services;
     }

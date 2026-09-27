@@ -28,5 +28,8 @@ public class TicketType
 
     public bool IsActive { get; set; } = true;
 
+    public int AvailableQuantity =>
+        TotalQuantity - ReservedQuantity - SoldQuantity;
+
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 }
