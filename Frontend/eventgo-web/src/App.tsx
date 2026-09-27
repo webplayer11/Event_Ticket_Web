@@ -2,6 +2,7 @@ import AccountPanel from "./components/AccountPanel";
 import RegisterPage from "./pages/RegisterPage";
 import AccountPage from "./pages/AccountPage";
 import AccountDropdown from "./components/account/AccountDropdown";
+import { CreateEventStep1 } from "./pages/OrganizerCenter/CreateEventStep1";
 import { useEffect, useMemo, useState } from "react";
 type EventItem = {
   id: number;
@@ -242,6 +243,11 @@ export default function Home() {
         }}
       />
     );
+  }
+
+  // Dedicated Organizer Create Event Step 1 Route
+  if (currentPath === "/organizer/create-event") {
+    return <CreateEventStep1 />;
   }
 
   return (
@@ -525,7 +531,7 @@ export default function Home() {
           <p className="kicker">DÀNH CHO NHÀ TỔ CHỨC</p>
           <h2>Một ý tưởng lớn<br />xứng đáng với sân khấu lớn.</h2>
           <p>Tạo trang sự kiện, quản lý hạng vé và tiếp cận đúng khán giả — tất cả trong một nơi.</p>
-          <button className="button primary" onClick={() => setAccountOpen(true)}>Bắt đầu tạo sự kiện <Icon name="arrow" /></button>
+          <button className="button primary" onClick={() => navigateTo('/organizer/create-event')}>Bắt đầu tạo sự kiện <Icon name="arrow" /></button>
           <div className="organizer-stats"><span><b>1.200+</b><small>Sự kiện mỗi năm</small></span><span><b>2,4 triệu</b><small>Người tham dự</small></span><span><b>98%</b><small>Vé điện tử</small></span></div>
         </div>
       </section>
