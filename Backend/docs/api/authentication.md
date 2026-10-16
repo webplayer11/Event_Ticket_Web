@@ -142,7 +142,9 @@ Base route: `/api/platform-admin/users`. These endpoints require the
 }
 ```
 
-Allowed values are `Customer` and `PlatformAdmin`. A Platform Admin cannot
+Allowed values are `Customer`, `Organizer` and `PlatformAdmin` (case-insensitive).
+A user holds exactly one system role; assigning a new one replaces the old one.
+A Platform Admin cannot
 change their own system role. A successful role change rotates the target
 user's `SecurityStamp`, so stale role claims stop working immediately.
 
@@ -159,9 +161,23 @@ from Identity lockout, which remains the temporary brute-force protection.
 The caller cannot change their own status. Every status change rotates the
 target user's `SecurityStamp`.
 
+### Admin guards
+
+Both endpoints run in a `Serializable` transaction and re-read the caller's
+role from the database instead of trusting the JWT claim:
+
+| Case | Response |
+|---|---|
+| Caller is no longer an active `PlatformAdmin` (e.g. demoted concurrently) | `403` |
+| Change would leave no active `PlatformAdmin` | `409` |
+| Deactivating a user who is the active `Owner` of an active organization | `409`; transfer ownership first |
+| SQL Server deadlock victim between two concurrent admin changes | `409`; retry |
+
 ## Role boundaries
 
-- System roles: `Customer`, `PlatformAdmin` in `AspNetRoles` / `AspNetUserRoles`.
+- System roles: `Customer`, `Organizer`, `PlatformAdmin` in `AspNetRoles` / `AspNetUserRoles`.
+  `Organizer` is required to create an organization (seeded by migration
+  `20261016160000_SeedOrganizerRole`).
 - Organization roles: `Owner`, `Manager`, `Staff` in `OrganizationMembers`.
 
 Organization roles never produce a `PlatformAdmin` JWT claim and never grant
@@ -172,6 +188,14 @@ Migration `20260920150000_SeedSystemRoles` inserts the two system roles. It
 does not create an initial Platform Admin account. The first Platform Admin
 must be provisioned through an approved deployment/operations process; the
 public API never self-promotes a user.
+
+For that process, set `Bootstrap__PlatformAdminEmail` to the email of an
+already-registered, active account. On startup `PlatformAdminBootstrapper`
+grants it `PlatformAdmin` only if no active `PlatformAdmin` exists yet; it never
+creates accounts or passwords. Remove the variable once the admin exists.
+
+Organization and check-in authorization is documented in
+[organization-authorization.md](organization-authorization.md).
 
 ## Email configuration
 

@@ -1,5 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+using EventGO.API.Extensions;
 using EventGO.Application.Reservations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -73,8 +72,11 @@ public sealed class ReservationsController : ControllerBase
             : Error(result.Error);
     }
 
-    private bool TryGetUserId(out Guid userId) => Guid.TryParse(
-        User.FindFirstValue(JwtRegisteredClaimNames.Sub), out userId);
+    private bool TryGetUserId(out Guid userId)
+    {
+        userId = User.GetUserId() ?? Guid.Empty;
+        return userId != Guid.Empty;
+    }
 
     private IActionResult Error(ReservationError error) => error switch
     {

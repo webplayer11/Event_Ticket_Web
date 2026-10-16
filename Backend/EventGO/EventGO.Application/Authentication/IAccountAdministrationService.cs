@@ -8,7 +8,14 @@ public enum AccountAdministrationError
     InvalidRole,
     SelfModificationNotAllowed,
     UserNotFound,
-    Conflict
+    Conflict,
+    // Người thực hiện không còn là PlatformAdmin đang hoạt động
+    // (ví dụ vừa bị Admin khác hạ quyền trong cùng thời điểm).
+    ActorNotAuthorized,
+    // Thao tác sẽ làm hệ thống không còn PlatformAdmin nào.
+    LastPlatformAdmin,
+    // Tài khoản đang là Owner của tổ chức, phải chuyển quyền trước khi khóa.
+    OwnsActiveOrganizations
 }
 
 public sealed record AccountAdministrationResult(

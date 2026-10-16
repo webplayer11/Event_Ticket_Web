@@ -7,7 +7,11 @@ public enum OrganizationMemberError
     Forbidden,
     UserNotFound,
     AlreadyMember,
-    InvalidRole
+    InvalidRole,
+    MemberNotFound,
+    CannotModifyOwner,
+    InvalidTransferTarget,
+    Conflict
 }
 
 public record OrganizationMemberResult<T>(
