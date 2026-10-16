@@ -482,6 +482,11 @@ namespace EventGO.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OrganizationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OrganizationMembers_SingleActiveOwner")
+                        .HasFilter("[Role] = 1 AND [IsActive] = 1");
+
                     b.HasIndex("UserId");
 
                     b.HasIndex("OrganizationId", "UserId")
