@@ -134,6 +134,12 @@ no in-memory blacklist.
 Base route: `/api/platform-admin/users`. These endpoints require the
 `PlatformAdmin` policy, backed by the Identity `PlatformAdmin` system role.
 
+### `GET /api/platform-admin/users?email={email}`
+
+Looks up an account by email (case-insensitive) so an admin can get its `id`
+before assigning a role or changing status. Returns `UserResponse` plus
+`isActive`; `404` when no account matches, `400` for an invalid email.
+
 ### `PUT /api/platform-admin/users/{userId}/system-role`
 
 ```json
@@ -172,6 +178,13 @@ role from the database instead of trusting the JWT claim:
 | Change would leave no active `PlatformAdmin` | `409` |
 | Deactivating a user who is the active `Owner` of an active organization | `409`; transfer ownership first |
 | SQL Server deadlock victim between two concurrent admin changes | `409`; retry |
+
+## Default authorization
+
+A fallback policy requires an authenticated user on every endpoint without
+explicit authorization metadata. Public endpoints (`register`, `login`,
+`forgot-password`, `reset-password`) opt out with `[AllowAnonymous]`; any new
+public endpoint must do the same.
 
 ## Role boundaries
 
