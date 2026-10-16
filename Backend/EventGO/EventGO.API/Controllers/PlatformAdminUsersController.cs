@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using EventGO.API.Extensions;
 using EventGO.Application.Authentication;
 using EventGO.Application.Authentication.Dtos;
@@ -17,6 +18,20 @@ public sealed class PlatformAdminUsersController : ControllerBase
         IAccountAdministrationService accountAdministration)
     {
         _accountAdministration = accountAdministration;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> FindByEmail(
+        [FromQuery, Required, EmailAddress, StringLength(256)] string email,
+        CancellationToken cancellationToken)
+    {
+        var user = await _accountAdministration.FindUserByEmailAsync(
+            email,
+            cancellationToken);
+
+        return user is null
+            ? NotFound(new { message = "Không tìm thấy tài khoản với email này." })
+            : Ok(user);
     }
 
     [HttpPut("{userId:guid}/system-role")]

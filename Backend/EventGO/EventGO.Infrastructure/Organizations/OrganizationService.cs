@@ -7,7 +7,6 @@ using EventGO.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using EventGO.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Data.SqlClient;
 
 
 namespace EventGO.Infrastructure.Organizations;
@@ -248,7 +247,7 @@ public class OrganizationService : IOrganizationService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException exception)
-            when (IsUniqueViolation(exception))
+            when (exception.IsUniqueViolation())
         {
             // Hai yêu cầu đồng thời có thể cùng vượt qua AnyAsync.
             // Unique index trong database sẽ chặn bản ghi thứ hai.
@@ -454,7 +453,7 @@ public class OrganizationService : IOrganizationService
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception)
-            when (IsUniqueViolation(exception))
+            when (exception.IsUniqueViolation())
         {
             // Một yêu cầu chuyển quyền khác chạy đồng thời đã thành công trước.
             await transaction.RollbackAsync(cancellationToken);
@@ -540,8 +539,4 @@ public class OrganizationService : IOrganizationService
     private static bool IsAssignableRole(int role) =>
         role == (int)OrganizationMemberRole.Manager
         || role == (int)OrganizationMemberRole.Staff;
-
-    private static bool IsUniqueViolation(DbUpdateException exception) =>
-        exception.InnerException is SqlException sql
-        && sql.Number is 2601 or 2627;
 }

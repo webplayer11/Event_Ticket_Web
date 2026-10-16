@@ -81,6 +81,7 @@ Base route: `/api/events/{eventId}/staff`
 | `DELETE` | `/{assignmentId}` | |
 
 The member must be active and belong to the organization that owns the event.
+Concurrent duplicate assignments return the existing row instead of `500`.
 Revoking sets `IsActive = false` (rows are kept because `CheckIns` reference
 them); assigning the same member again reactivates the row.
 
@@ -100,7 +101,7 @@ assign themselves first.
 | No active assignment for the event | `403` | `CHECK_IN_NOT_ASSIGNED` |
 | QR unknown or belongs to another event | `404` | `TICKET_NOT_FOUND` |
 | Ticket already checked in (including concurrent scans) | `409` | `TICKET_ALREADY_CHECKED_IN` |
-| Ticket cancelled | `422` | `TICKET_NOT_VALID` |
+| Ticket cancelled, order not `Paid` (refunded/cancelled), or event `Cancelled` | `422` | `TICKET_NOT_VALID` |
 
 The customer email in the response is masked (`cu***@example.com`).
 
