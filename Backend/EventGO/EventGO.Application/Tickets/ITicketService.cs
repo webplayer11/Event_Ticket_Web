@@ -22,9 +22,22 @@ public interface ITicketService
 
     /// <summary>
     /// Tra cứu QR token để xác minh vé (dành cho check-in).
-    /// Nhận raw token → hash SHA-256 → lookup QrTokenHash.
+    /// Chỉ người có phân công soát vé còn hiệu lực cho sự kiện mới được tra cứu,
+    /// và chỉ tìm vé thuộc đúng sự kiện đó.
     /// </summary>
-    Task<TicketValidationResponse?> ValidateQrTokenAsync(
+    Task<TicketCheckInResult> ValidateQrTokenAsync(
+        Guid staffUserId,
+        Guid eventId,
         string qrToken,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check-in vé. Cùng điều kiện quyền như ValidateQrTokenAsync;
+    /// mỗi vé chỉ check-in được một lần.
+    /// </summary>
+    Task<TicketCheckInResult> CheckInAsync(
+        Guid staffUserId,
+        Guid eventId,
+        CheckInTicketRequest request,
         CancellationToken cancellationToken = default);
 }
