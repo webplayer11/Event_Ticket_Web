@@ -23,6 +23,10 @@ only blocks creating *new* organizations; existing memberships are untouched.
 Buying tickets only needs an authenticated account, so Organizers can still
 book.
 
+Regular users do not need `Organizer` to run events: their first event
+automatically creates a *personal* organization they own. See
+[events.md](events.md).
+
 ## Permission matrix
 
 Defined once in `OrganizationPermissions`.
