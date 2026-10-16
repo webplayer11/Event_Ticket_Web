@@ -25,6 +25,12 @@ public class OrganizationMemberConfiguration
         builder.HasIndex(x => new { x.OrganizationId, x.UserId })
             .IsUnique();
 
+        // Mỗi tổ chức chỉ có đúng một Owner đang hoạt động.
+        builder.HasIndex(x => x.OrganizationId)
+            .IsUnique()
+            .HasFilter("[Role] = 1 AND [IsActive] = 1")
+            .HasDatabaseName("IX_OrganizationMembers_SingleActiveOwner");
+
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(x => x.OrganizationId)
