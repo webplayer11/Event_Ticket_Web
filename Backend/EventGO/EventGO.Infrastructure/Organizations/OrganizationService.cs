@@ -1,4 +1,5 @@
-﻿using EventGO.Application.Organizations;
+using EventGO.Application.Authorization;
+using EventGO.Application.Organizations;
 using EventGO.Application.Organizations.Dtos;
 using EventGO.Domain.Entities;
 using EventGO.Domain.Enums;
@@ -15,13 +16,16 @@ public class OrganizationService : IOrganizationService
 {
     private readonly EventGoDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IOrganizationAuthorizer _authorizer;
 
     public OrganizationService(
         EventGoDbContext dbContext,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IOrganizationAuthorizer authorizer)
     {
         _dbContext = dbContext;
         _userManager = userManager;
+        _authorizer = authorizer;
     }
 
     public async Task<OrganizationResponse> CreateAsync(
@@ -102,18 +106,16 @@ public class OrganizationService : IOrganizationService
             CreatedAt = row.CreatedAt
         }).ToList();
     }
+
     public async Task<OrganizationResponse?> GetByIdAsync(
-    Guid organizationId,
-    Guid currentUserId,
-    CancellationToken cancellationToken = default)
+        Guid organizationId,
+        Guid currentUserId,
+        CancellationToken cancellationToken = default)
     {
-        var membership = await _dbContext.OrganizationMembers
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                x => x.OrganizationId == organizationId
-                    && x.UserId == currentUserId
-                    && x.IsActive,
-                cancellationToken);
+        var membership = await _authorizer.GetMembershipAsync(
+            organizationId,
+            currentUserId,
+            cancellationToken);
 
         if (membership is null)
         {
@@ -122,14 +124,7 @@ public class OrganizationService : IOrganizationService
 
         var organization = await _dbContext.Organizations
             .AsNoTracking()
-            .SingleOrDefaultAsync(
-                x => x.Id == organizationId && x.IsActive,
-                cancellationToken);
-
-        if (organization is null)
-        {
-            return null;
-        }
+            .SingleAsync(x => x.Id == organizationId, cancellationToken);
 
         return MapOrganization(organization, membership.Role);
     }
@@ -142,34 +137,23 @@ public class OrganizationService : IOrganizationService
             UpdateOrganizationRequest request,
             CancellationToken cancellationToken = default)
     {
-        var membership = await _dbContext.OrganizationMembers
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                x => x.OrganizationId == organizationId
-                    && x.UserId == currentUserId
-                    && x.IsActive,
-                cancellationToken);
+        var membership = await _authorizer.GetMembershipAsync(
+            organizationId,
+            currentUserId,
+            cancellationToken);
 
         if (membership is null)
         {
             return (null, false);
         }
 
-        var organization = await _dbContext.Organizations
-            .SingleOrDefaultAsync(
-                x => x.Id == organizationId && x.IsActive,
-                cancellationToken);
-
-        if (organization is null)
-        {
-            return (null, false);
-        }
-
-        if (membership.Role != OrganizationMemberRole.Owner
-            && membership.Role != OrganizationMemberRole.Manager)
+        if (!OrganizationPermissions.CanManageOrganization(membership.Role))
         {
             return (null, true);
         }
+
+        var organization = await _dbContext.Organizations
+            .SingleAsync(x => x.Id == organizationId, cancellationToken);
 
         organization.Name = request.Name.Trim();
         organization.Description =
@@ -199,22 +183,6 @@ public class OrganizationService : IOrganizationService
             CreatedAt = organization.CreatedAt
         };
     }
-    private async Task<OrganizationMember?> GetActiveMembershipAsync(
-    Guid organizationId,
-    Guid currentUserId,
-    CancellationToken cancellationToken)
-    {
-        return await (
-            from member in _dbContext.OrganizationMembers.AsNoTracking()
-            join organization in _dbContext.Organizations.AsNoTracking()
-                on member.OrganizationId equals organization.Id
-            where member.OrganizationId == organizationId
-                && member.UserId == currentUserId
-                && member.IsActive
-                && organization.IsActive
-            select member
-        ).SingleOrDefaultAsync(cancellationToken);
-    }
 
     public async Task<OrganizationMemberResult<OrganizationMemberResponse>>
         AddMemberAsync(
@@ -223,7 +191,7 @@ public class OrganizationService : IOrganizationService
             AddOrganizationMemberRequest request,
             CancellationToken cancellationToken = default)
     {
-        var actor = await GetActiveMembershipAsync(
+        var actor = await _authorizer.GetMembershipAsync(
             organizationId,
             currentUserId,
             cancellationToken);
@@ -233,15 +201,14 @@ public class OrganizationService : IOrganizationService
             return new(null, OrganizationMemberError.NotFound);
         }
 
-        if (actor.Role != OrganizationMemberRole.Owner)
+        if (!OrganizationPermissions.CanManageMembers(actor.Role))
         {
             return new(null, OrganizationMemberError.Forbidden);
         }
 
         // Kiểm tra trong service để bảo vệ quy tắc nghiệp vụ,
         // kể cả khi phương thức được gọi ngoài Controller.
-        if (request.Role != (int)OrganizationMemberRole.Manager
-            && request.Role != (int)OrganizationMemberRole.Staff)
+        if (!IsAssignableRole(request.Role))
         {
             return new(null, OrganizationMemberError.InvalidRole);
         }
@@ -260,7 +227,7 @@ public class OrganizationService : IOrganizationService
                 cancellationToken);
 
         // Bao gồm cả thành viên đã bị khóa.
-        // Khôi phục thành viên sẽ dùng chức năng riêng.
+        // Mở khóa thành viên dùng chức năng cập nhật trạng thái.
         if (alreadyMember)
         {
             return new(null, OrganizationMemberError.AlreadyMember);
@@ -281,8 +248,7 @@ public class OrganizationService : IOrganizationService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException exception)
-            when (exception.InnerException is SqlException sql
-                && (sql.Number == 2601 || sql.Number == 2627))
+            when (IsUniqueViolation(exception))
         {
             // Hai yêu cầu đồng thời có thể cùng vượt qua AnyAsync.
             // Unique index trong database sẽ chặn bản ghi thứ hai.
@@ -292,16 +258,7 @@ public class OrganizationService : IOrganizationService
         }
 
         return new(
-            new OrganizationMemberResponse
-            {
-                Id = membership.Id,
-                UserId = user.Id,
-                FullName = user.FullName,
-                Email = user.Email ?? string.Empty,
-                Role = membership.Role.ToString(),
-                IsActive = membership.IsActive,
-                JoinedAt = membership.JoinedAt
-            },
+            MapMember(membership, user),
             OrganizationMemberError.None);
     }
 
@@ -312,7 +269,7 @@ public class OrganizationService : IOrganizationService
             Guid currentUserId,
             CancellationToken cancellationToken = default)
     {
-        var actor = await GetActiveMembershipAsync(
+        var actor = await _authorizer.GetMembershipAsync(
             organizationId,
             currentUserId,
             cancellationToken);
@@ -322,8 +279,7 @@ public class OrganizationService : IOrganizationService
             return new(null, OrganizationMemberError.NotFound);
         }
 
-        if (actor.Role != OrganizationMemberRole.Owner
-            && actor.Role != OrganizationMemberRole.Manager)
+        if (!OrganizationPermissions.CanManageOrganization(actor.Role))
         {
             return new(null, OrganizationMemberError.Forbidden);
         }
@@ -359,4 +315,233 @@ public class OrganizationService : IOrganizationService
 
         return new(members, OrganizationMemberError.None);
     }
+
+    public async Task<OrganizationMemberResult<OrganizationMemberResponse>>
+        UpdateMemberRoleAsync(
+            Guid organizationId,
+            Guid currentUserId,
+            Guid memberId,
+            UpdateOrganizationMemberRoleRequest request,
+            CancellationToken cancellationToken = default)
+    {
+        var (target, error) = await LoadManageableMemberAsync(
+            organizationId,
+            currentUserId,
+            memberId,
+            cancellationToken);
+
+        if (target is null)
+        {
+            return new(null, error);
+        }
+
+        if (!IsAssignableRole(request.Role))
+        {
+            return new(null, OrganizationMemberError.InvalidRole);
+        }
+
+        target.Role = (OrganizationMemberRole)request.Role;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new(
+            await MapMemberAsync(target, cancellationToken),
+            OrganizationMemberError.None);
+    }
+
+    public async Task<OrganizationMemberResult<OrganizationMemberResponse>>
+        UpdateMemberStatusAsync(
+            Guid organizationId,
+            Guid currentUserId,
+            Guid memberId,
+            UpdateOrganizationMemberStatusRequest request,
+            CancellationToken cancellationToken = default)
+    {
+        var (target, error) = await LoadManageableMemberAsync(
+            organizationId,
+            currentUserId,
+            memberId,
+            cancellationToken);
+
+        if (target is null)
+        {
+            return new(null, error);
+        }
+
+        target.IsActive = request.IsActive;
+
+        if (!request.IsActive)
+        {
+            // Thành viên bị khóa không còn được soát vé ở sự kiện nào.
+            var assignments = await _dbContext.EventStaffAssignments
+                .Where(x => x.OrganizationMemberId == target.Id && x.IsActive)
+                .ToListAsync(cancellationToken);
+
+            foreach (var assignment in assignments)
+            {
+                assignment.IsActive = false;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new(
+            await MapMemberAsync(target, cancellationToken),
+            OrganizationMemberError.None);
+    }
+
+    public async Task<OrganizationMemberResult<OrganizationMemberResponse>>
+        TransferOwnershipAsync(
+            Guid organizationId,
+            Guid currentUserId,
+            TransferOrganizationOwnershipRequest request,
+            CancellationToken cancellationToken = default)
+    {
+        var actor = await _authorizer.GetMembershipAsync(
+            organizationId,
+            currentUserId,
+            cancellationToken);
+
+        if (actor is null)
+        {
+            return new(null, OrganizationMemberError.NotFound);
+        }
+
+        if (actor.Role != OrganizationMemberRole.Owner)
+        {
+            return new(null, OrganizationMemberError.Forbidden);
+        }
+
+        if (request.NewOwnerMemberId == actor.MemberId)
+        {
+            return new(null, OrganizationMemberError.InvalidTransferTarget);
+        }
+
+        var target = await _dbContext.OrganizationMembers
+            .SingleOrDefaultAsync(
+                x => x.Id == request.NewOwnerMemberId
+                    && x.OrganizationId == organizationId,
+                cancellationToken);
+
+        if (target is null)
+        {
+            return new(null, OrganizationMemberError.MemberNotFound);
+        }
+
+        var targetUserActive = await _dbContext.Users
+            .AnyAsync(x => x.Id == target.UserId && x.IsActive, cancellationToken);
+
+        if (!target.IsActive || !targetUserActive)
+        {
+            return new(null, OrganizationMemberError.InvalidTransferTarget);
+        }
+
+        var currentOwner = await _dbContext.OrganizationMembers
+            .SingleAsync(x => x.Id == actor.MemberId, cancellationToken);
+
+        await using var transaction =
+            await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            // Hạ Owner cũ trước rồi mới nâng Owner mới, để không lúc nào
+            // vi phạm unique index "mỗi tổ chức một Owner đang hoạt động".
+            currentOwner.Role = OrganizationMemberRole.Manager;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            target.Role = OrganizationMemberRole.Owner;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+            when (IsUniqueViolation(exception))
+        {
+            // Một yêu cầu chuyển quyền khác chạy đồng thời đã thành công trước.
+            await transaction.RollbackAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+
+            return new(null, OrganizationMemberError.Conflict);
+        }
+
+        return new(
+            await MapMemberAsync(target, cancellationToken),
+            OrganizationMemberError.None);
+    }
+
+    /// <summary>
+    /// Kiểm tra actor là Owner và tải thành viên cần sửa.
+    /// Owner không bị sửa vai trò hay trạng thái qua chức năng này.
+    /// </summary>
+    private async Task<(OrganizationMember? Member, OrganizationMemberError Error)>
+        LoadManageableMemberAsync(
+            Guid organizationId,
+            Guid currentUserId,
+            Guid memberId,
+            CancellationToken cancellationToken)
+    {
+        var actor = await _authorizer.GetMembershipAsync(
+            organizationId,
+            currentUserId,
+            cancellationToken);
+
+        if (actor is null)
+        {
+            return (null, OrganizationMemberError.NotFound);
+        }
+
+        if (!OrganizationPermissions.CanManageMembers(actor.Role))
+        {
+            return (null, OrganizationMemberError.Forbidden);
+        }
+
+        var target = await _dbContext.OrganizationMembers
+            .SingleOrDefaultAsync(
+                x => x.Id == memberId && x.OrganizationId == organizationId,
+                cancellationToken);
+
+        if (target is null)
+        {
+            return (null, OrganizationMemberError.MemberNotFound);
+        }
+
+        if (target.Role == OrganizationMemberRole.Owner)
+        {
+            return (null, OrganizationMemberError.CannotModifyOwner);
+        }
+
+        return (target, OrganizationMemberError.None);
+    }
+
+    private async Task<OrganizationMemberResponse> MapMemberAsync(
+        OrganizationMember member,
+        CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == member.UserId, cancellationToken);
+
+        return MapMember(member, user);
+    }
+
+    private static OrganizationMemberResponse MapMember(
+        OrganizationMember member,
+        ApplicationUser user) =>
+        new()
+        {
+            Id = member.Id,
+            UserId = user.Id,
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            Role = member.Role.ToString(),
+            IsActive = member.IsActive,
+            JoinedAt = member.JoinedAt
+        };
+
+    private static bool IsAssignableRole(int role) =>
+        role == (int)OrganizationMemberRole.Manager
+        || role == (int)OrganizationMemberRole.Staff;
+
+    private static bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException is SqlException sql
+        && sql.Number is 2601 or 2627;
 }
