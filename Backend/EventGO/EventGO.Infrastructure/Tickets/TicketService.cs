@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using EventGO.Application.Authorization;
 using EventGO.Application.Tickets;
 using EventGO.Application.Tickets.Dtos;
 using EventGO.Domain.Entities;
@@ -12,10 +13,17 @@ namespace EventGO.Infrastructure.Tickets;
 public class TicketService : ITicketService
 {
     private readonly EventGoDbContext _dbContext;
+    private readonly IOrganizationAuthorizer _authorizer;
+    private readonly TimeProvider _timeProvider;
 
-    public TicketService(EventGoDbContext dbContext)
+    public TicketService(
+        EventGoDbContext dbContext,
+        IOrganizationAuthorizer authorizer,
+        TimeProvider timeProvider)
     {
         _dbContext = dbContext;
+        _authorizer = authorizer;
+        _timeProvider = timeProvider;
     }
 
     // ───────────────────────────────────────────────
@@ -139,12 +147,108 @@ public class TicketService : ITicketService
     }
 
     // ───────────────────────────────────────────────
-    //  Validate QR Token (cho check-in)
+    //  Validate QR Token + Check-in
     // ───────────────────────────────────────────────
 
-    public async Task<TicketValidationResponse?> ValidateQrTokenAsync(
+    public async Task<TicketCheckInResult> ValidateQrTokenAsync(
+        Guid staffUserId,
+        Guid eventId,
         string qrToken,
         CancellationToken cancellationToken = default)
+    {
+        var assignmentId = await _authorizer.GetActiveStaffAssignmentIdAsync(
+            eventId,
+            staffUserId,
+            cancellationToken);
+
+        if (assignmentId is null)
+        {
+            return new(null, TicketCheckInError.Forbidden);
+        }
+
+        var ticket = await FindTicketForEventAsync(
+            eventId,
+            qrToken,
+            cancellationToken);
+
+        return ticket is null
+            ? new(null, TicketCheckInError.TicketNotFound)
+            : new(ticket, TicketCheckInError.None);
+    }
+
+    public async Task<TicketCheckInResult> CheckInAsync(
+        Guid staffUserId,
+        Guid eventId,
+        CheckInTicketRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var assignmentId = await _authorizer.GetActiveStaffAssignmentIdAsync(
+            eventId,
+            staffUserId,
+            cancellationToken);
+
+        if (assignmentId is null)
+        {
+            return new(null, TicketCheckInError.Forbidden);
+        }
+
+        var found = await FindTicketForEventAsync(
+            eventId,
+            request.QrToken,
+            cancellationToken);
+
+        if (found is null)
+        {
+            return new(null, TicketCheckInError.TicketNotFound);
+        }
+
+        if (found.IsCheckedIn || found.Status == TicketStatus.Used.ToString())
+        {
+            return new(found, TicketCheckInError.AlreadyCheckedIn);
+        }
+
+        if (found.Status != TicketStatus.Valid.ToString())
+        {
+            return new(found, TicketCheckInError.TicketNotValid);
+        }
+
+        var ticket = await _dbContext.Tickets
+            .SingleAsync(x => x.Id == found.TicketId, cancellationToken);
+
+        var now = _timeProvider.GetUtcNow();
+        ticket.Status = TicketStatus.Used;
+        ticket.UsedAt = now;
+
+        _dbContext.CheckIns.Add(new CheckIn
+        {
+            TicketId = ticket.Id,
+            EventStaffAssignmentId = assignmentId.Value,
+            CheckedInAt = now,
+            GateName = request.GateName?.Trim(),
+            Note = request.Note?.Trim()
+        });
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Hai cổng quét cùng một vé: RowVersion của Ticket hoặc
+            // unique index CheckIns.TicketId chặn lượt thứ hai.
+            _dbContext.ChangeTracker.Clear();
+            return new(found, TicketCheckInError.AlreadyCheckedIn);
+        }
+
+        found.Status = ticket.Status.ToString();
+        found.IsCheckedIn = true;
+        return new(found, TicketCheckInError.None);
+    }
+
+    private async Task<TicketValidationResponse?> FindTicketForEventAsync(
+        Guid eventId,
+        string qrToken,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(qrToken))
         {
@@ -162,6 +266,8 @@ public class TicketService : ITicketService
             join evt in _dbContext.Events.AsNoTracking()
                 on order.EventId equals evt.Id
             where ticket.QrTokenHash == hash
+                // Vé của sự kiện khác coi như không tồn tại.
+                && evt.Id == eventId
             select new
             {
                 ticket.Id,
@@ -197,8 +303,21 @@ public class TicketService : ITicketService
             Status = result.Status.ToString(),
             IsCheckedIn = isCheckedIn,
             CustomerName = result.CustomerName,
-            CustomerEmail = result.CustomerEmail
+            // Người soát vé chỉ cần đối chiếu, không cần email đầy đủ.
+            CustomerEmail = MaskEmail(result.CustomerEmail)
         };
+    }
+
+    private static string MaskEmail(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0)
+        {
+            return string.Empty;
+        }
+
+        var visible = Math.Min(2, at);
+        return string.Concat(email.AsSpan(0, visible), "***", email.AsSpan(at));
     }
 
     // ───────────────────────────────────────────────

@@ -19,6 +19,12 @@ using EventGO.Application.Reservations;
 using EventGO.Infrastructure.Orders;
 using EventGO.Infrastructure.Payments;
 using EventGO.Infrastructure.Reservations;
+using EventGO.Application.Authorization;
+using EventGO.Application.Events;
+using EventGO.Application.Tickets;
+using EventGO.Infrastructure.Authorization;
+using EventGO.Infrastructure.Events;
+using EventGO.Infrastructure.Tickets;
 
 namespace EventGO.Infrastructure;
 
@@ -172,7 +178,10 @@ public static class DependencyInjection
         services.AddOptions<PasswordResetEmailOptions>()
             .Bind(configuration.GetSection(
                 PasswordResetEmailOptions.SectionName));
+        services.AddScoped<IOrganizationAuthorizer, OrganizationAuthorizer>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IEventStaffService, EventStaffService>();
+        services.AddScoped<ITicketService, TicketService>();
         services.AddScoped<IReservationService, ReservationService>();
         services.AddScoped<IReservationExpirationService, ReservationService>();
         services.AddScoped<
@@ -185,6 +194,7 @@ public static class DependencyInjection
         services.AddOptions<ReservationOptions>()
             .Bind(configuration.GetSection(ReservationOptions.SectionName));
         services.AddHostedService<ReservationExpirationWorker>();
+        services.AddHostedService<PlatformAdminBootstrapper>();
 
         return services;
     }
