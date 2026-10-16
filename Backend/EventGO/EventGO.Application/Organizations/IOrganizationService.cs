@@ -32,4 +32,24 @@ public interface IOrganizationService
         Guid organizationId,
         Guid currentUserId,
         CancellationToken cancellationToken = default);
+
+    Task<OrganizationMemberResult<OrganizationMemberResponse>> UpdateMemberRoleAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        Guid memberId,
+        UpdateOrganizationMemberRoleRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<OrganizationMemberResult<OrganizationMemberResponse>> UpdateMemberStatusAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        Guid memberId,
+        UpdateOrganizationMemberStatusRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<OrganizationMemberResult<OrganizationMemberResponse>> TransferOwnershipAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        TransferOrganizationOwnershipRequest request,
+        CancellationToken cancellationToken = default);
 }
