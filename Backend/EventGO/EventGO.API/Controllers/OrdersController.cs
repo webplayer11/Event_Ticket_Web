@@ -1,5 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+using EventGO.API.Extensions;
 using EventGO.Application.Orders;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,8 +22,7 @@ public sealed class OrdersController : ControllerBase
         CreateOrderRequest request,
         CancellationToken cancellationToken)
     {
-        var subject = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        if (!Guid.TryParse(subject, out var userId))
+        if (User.GetUserId() is not { } userId)
         {
             return Unauthorized();
         }

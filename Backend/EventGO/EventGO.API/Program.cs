@@ -44,6 +44,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(
         AuthorizationPolicies.PlatformAdmin,
         policy => policy.RequireRole(SystemRoles.PlatformAdmin));
+    options.AddPolicy(
+        AuthorizationPolicies.Organizer,
+        policy => policy.RequireRole(SystemRoles.Organizer));
 });
 
 builder.Services.AddRateLimiter(options =>

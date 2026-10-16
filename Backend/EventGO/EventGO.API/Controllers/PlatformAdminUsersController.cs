@@ -1,5 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+using EventGO.API.Extensions;
 using EventGO.Application.Authentication;
 using EventGO.Application.Authentication.Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -75,6 +74,21 @@ public sealed class PlatformAdminUsersController : ControllerBase
                     message =
                         "Không thể thay đổi vai trò hoặc trạng thái của chính mình."
                 }),
+            AccountAdministrationError.ActorNotAuthorized =>
+                StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    message = "Bạn không còn quyền quản trị hệ thống."
+                }),
+            AccountAdministrationError.LastPlatformAdmin => Conflict(new
+            {
+                message = "Không thể tước quyền Admin cuối cùng của hệ thống."
+            }),
+            AccountAdministrationError.OwnsActiveOrganizations => Conflict(new
+            {
+                message =
+                    "Tài khoản đang là Owner của tổ chức. " +
+                    "Hãy chuyển quyền Owner trước khi khóa."
+            }),
             _ => Conflict(new
             {
                 message = "Tài khoản đã thay đổi. Vui lòng thử lại."
@@ -83,7 +97,7 @@ public sealed class PlatformAdminUsersController : ControllerBase
 
     private bool TryGetCurrentUserId(out Guid userId)
     {
-        var subject = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
-        return Guid.TryParse(subject, out userId);
+        userId = User.GetUserId() ?? Guid.Empty;
+        return userId != Guid.Empty;
     }
 }
