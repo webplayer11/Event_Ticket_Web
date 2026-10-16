@@ -1,0 +1,62 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../stores/useAuthStore";
+import AccountNavbar from "../../components/account/AccountNavbar";
+import AccountSidebar from "../../components/account/AccountSidebar";
+import ProfileHeader from "../../components/account/ProfileHeader";
+import MembershipSection from "../../components/account/MembershipSection";
+import FollowingSection from "../../components/account/FollowingSection";
+
+export const AccountPage = () => {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
+  const userName = user?.fullName || "Tài khoản";
+  const userEmail = user?.email || "";
+
+  return (
+    <div className="flex min-h-screen flex-col bg-[#111] text-white">
+      {/* Green Navbar */}
+      <AccountNavbar
+        userName={userName}
+        onNavigate={(path) => navigate(path)}
+        onLogout={() => {
+          logout();
+          navigate("/");
+        }}
+      />
+
+      {/* Main Container */}
+      <div className="flex flex-1 flex-col md:flex-row mx-auto w-full max-w-[1440px]">
+        {/* Sidebar */}
+        <AccountSidebar
+          userName={userName}
+          activePath="/account"
+          onNavigate={(path) => navigate(path)}
+        />
+
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-10">
+          <div className="mx-auto max-w-4xl flex flex-col h-full space-y-6">
+            <ProfileHeader userName={userName} userEmail={userEmail} />
+
+            <div className="flex flex-col gap-6 lg:flex-row flex-1">
+              <MembershipSection onExplore={() => navigate("/membership")} />
+              <FollowingSection onExplore={() => navigate("/")} />
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <footer className="shrink-0 border-t border-white/5 bg-[#111] py-4 text-center text-xs font-medium text-white/40">
+        © 2026 EventGo.
+      </footer>
+    </div>
+  );
+};
