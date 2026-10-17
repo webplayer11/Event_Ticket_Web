@@ -12,6 +12,10 @@ Desktop.ini
 # Local environment file placed directly at the repository root
 /.env
 
+# Local API settings (machine-specific SQL Server connection)
+/Backend/EventGO/EventGO.API/appsettings.json
+/Backend/EventGO/EventGO.API/appsettings.Development.json
+
 # Root-only AI agent instructions and one-off prompts
 /RULES_CODEX.md
 
