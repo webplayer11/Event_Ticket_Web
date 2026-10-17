@@ -21,8 +21,13 @@ public sealed class PasswordResetEmailOptions
     public string ResetUrl { get; set; } = string.Empty;
 
     public bool IsConfigured() =>
+        IsSmtpConfigured()
+        && Uri.TryCreate(ResetUrl, UriKind.Absolute, out _);
+
+    // Đủ thông tin để gửi email nói chung (không cần ResetUrl).
+    // Dùng chung cho các email hệ thống khác, vd: báo Admin duyệt sự kiện.
+    public bool IsSmtpConfigured() =>
         !string.IsNullOrWhiteSpace(Host)
         && Port is > 0 and <= 65535
-        && !string.IsNullOrWhiteSpace(FromAddress)
-        && Uri.TryCreate(ResetUrl, UriKind.Absolute, out _);
+        && !string.IsNullOrWhiteSpace(FromAddress);
 }

@@ -1,4 +1,5 @@
 ﻿using EventGO.Domain.Entities;
+using EventGO.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -32,5 +33,14 @@ public class OrganizationConfiguration
         builder.Property(x => x.Address)
             .HasMaxLength(500)
             .IsRequired();
+
+        builder.HasIndex(x => x.PersonalOwnerUserId)
+            .IsUnique()
+            .HasFilter("[PersonalOwnerUserId] IS NOT NULL");
+
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(x => x.PersonalOwnerUserId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

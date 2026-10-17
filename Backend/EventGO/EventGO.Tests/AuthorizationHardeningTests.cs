@@ -114,6 +114,109 @@ public sealed class AuthorizationHardeningTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tickets_of_refunded_or_cancelled_orders_or_cancelled_events_cannot_check_in()
+    {
+        var org = await CreateOrganizationWithStaffAsync();
+        var liveEvent = await SeedEventAsync(org.OrganizationId, org.OwnerId);
+        var cancelledEvent = await SeedEventAsync(
+            org.OrganizationId,
+            org.OwnerId,
+            EventStatus.Cancelled);
+        await AssignStaffAsync(org.OwnerToken, liveEvent, org.StaffMemberId);
+        await AssignStaffAsync(org.OwnerToken, cancelledEvent, org.StaffMemberId);
+
+        await SeedTicketAsync(liveEvent, org.OwnerId, "qr-refunded", OrderStatus.Refunded);
+        await SeedTicketAsync(liveEvent, org.OwnerId, "qr-cancelled", OrderStatus.Cancelled);
+        await SeedTicketAsync(cancelledEvent, org.OwnerId, "qr-event-cancelled");
+
+        foreach (var (eventId, qrToken) in new[]
+        {
+            (liveEvent, "qr-refunded"),
+            (liveEvent, "qr-cancelled"),
+            (cancelledEvent, "qr-event-cancelled")
+        })
+        {
+            var validate = await ValidateAsync(org.StaffToken, eventId, qrToken);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, validate.StatusCode);
+            Assert.Equal(
+                "TICKET_NOT_VALID",
+                (await ReadJsonAsync(validate)).GetProperty("error").GetProperty("code").GetString());
+
+            Assert.Equal(
+                HttpStatusCode.UnprocessableEntity,
+                (await CheckInAsync(org.StaffToken, eventId, qrToken)).StatusCode);
+        }
+
+        // Không vé nào bị đánh dấu đã dùng.
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EventGoDbContext>();
+        Assert.Equal(0, await dbContext.CheckIns.CountAsync());
+        Assert.False(await dbContext.Tickets.AnyAsync(x => x.Status == TicketStatus.Used));
+    }
+
+    [Fact]
+    public async Task Endpoints_require_authentication_by_default()
+    {
+        // Không có endpoint nào khớp: fallback policy vẫn yêu cầu đăng nhập.
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await _client.GetAsync("/api/not-a-real-endpoint")).StatusCode);
+
+        // Endpoint [AllowAnonymous] vẫn công khai.
+        var register = await _client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                fullName = "Fallback Test",
+                email = UniqueEmail("fallback"),
+                password = ValidPassword,
+                confirmPassword = ValidPassword
+            });
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_can_look_up_user_by_email()
+    {
+        var (_, adminToken) = await CreateAdminAsync("admin-lookup");
+        var email = UniqueEmail("lookup-target");
+        var target = await _factory.CreateUserAsync(email, ValidPassword);
+        var customerToken = await LoginAsync(email);
+
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await SendAsync(
+                HttpMethod.Get,
+                $"/api/platform-admin/users?email={email}",
+                customerToken)).StatusCode);
+
+        var found = await SendAsync(
+            HttpMethod.Get,
+            $"/api/platform-admin/users?email={email.ToUpperInvariant()}",
+            adminToken);
+        Assert.Equal(HttpStatusCode.OK, found.StatusCode);
+        var body = await ReadJsonAsync(found);
+        Assert.Equal(target.Id, body.GetProperty("id").GetGuid());
+        Assert.True(body.GetProperty("isActive").GetBoolean());
+        Assert.Equal(
+            [SystemRoles.Customer],
+            body.GetProperty("systemRoles").EnumerateArray().Select(x => x.GetString()));
+
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await SendAsync(
+                HttpMethod.Get,
+                $"/api/platform-admin/users?email={UniqueEmail("missing")}",
+                adminToken)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await SendAsync(
+                HttpMethod.Get,
+                "/api/platform-admin/users?email=not-an-email",
+                adminToken)).StatusCode);
+    }
+
+    [Fact]
     public async Task Deactivated_member_loses_assignments_and_organization_access()
     {
         var org = await CreateOrganizationWithStaffAsync();
@@ -446,7 +549,10 @@ public sealed class AuthorizationHardeningTests : IAsyncLifetime
         return (await LoginAsync(email), memberId);
     }
 
-    private async Task<Guid> SeedEventAsync(Guid organizationId, Guid createdByUserId)
+    private async Task<Guid> SeedEventAsync(
+        Guid organizationId,
+        Guid createdByUserId,
+        EventStatus status = EventStatus.Published)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EventGoDbContext>();
@@ -463,7 +569,7 @@ public sealed class AuthorizationHardeningTests : IAsyncLifetime
             City = "HCM",
             StartsAt = DateTimeOffset.UtcNow.AddDays(1),
             EndsAt = DateTimeOffset.UtcNow.AddDays(2),
-            Status = EventStatus.Published,
+            Status = status,
             RowVersion = [1]
         };
         dbContext.Events.Add(evt);
@@ -471,7 +577,11 @@ public sealed class AuthorizationHardeningTests : IAsyncLifetime
         return evt.Id;
     }
 
-    private async Task SeedTicketAsync(Guid eventId, Guid buyerId, string qrToken)
+    private async Task SeedTicketAsync(
+        Guid eventId,
+        Guid buyerId,
+        string qrToken,
+        OrderStatus orderStatus = OrderStatus.Paid)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EventGoDbContext>();
@@ -485,7 +595,7 @@ public sealed class AuthorizationHardeningTests : IAsyncLifetime
             CustomerEmail = "customer@example.com",
             CustomerPhone = "0900000000",
             TotalAmount = 100_000m,
-            Status = OrderStatus.Paid,
+            Status = orderStatus,
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5),
             PaidAt = DateTimeOffset.UtcNow.AddMinutes(-5),

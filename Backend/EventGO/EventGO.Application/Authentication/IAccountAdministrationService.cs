@@ -24,6 +24,14 @@ public sealed record AccountAdministrationResult(
 
 public interface IAccountAdministrationService
 {
+    /// <summary>
+    /// Tra cứu tài khoản theo email (không phân biệt hoa thường),
+    /// để Admin lấy userId khi cấp vai trò hoặc khóa tài khoản.
+    /// </summary>
+    Task<AdminUserResponse?> FindUserByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default);
+
     Task<AccountAdministrationResult> AssignSystemRoleAsync(
         Guid actorUserId,
         Guid targetUserId,
