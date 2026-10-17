@@ -219,6 +219,48 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("EventCategories", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b01"),
+                            Description = "",
+                            IsActive = true,
+                            Name = "Âm nhạc",
+                            Slug = "am-nhac"
+                        },
+                        new
+                        {
+                            Id = new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b02"),
+                            Description = "",
+                            IsActive = true,
+                            Name = "Thể thao",
+                            Slug = "the-thao"
+                        },
+                        new
+                        {
+                            Id = new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b03"),
+                            Description = "",
+                            IsActive = true,
+                            Name = "Hội thảo/Workshop",
+                            Slug = "hoi-thao-workshop"
+                        },
+                        new
+                        {
+                            Id = new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b04"),
+                            Description = "",
+                            IsActive = true,
+                            Name = "Sân khấu & Nghệ thuật",
+                            Slug = "san-khau-nghe-thuat"
+                        },
+                        new
+                        {
+                            Id = new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b05"),
+                            Description = "",
+                            IsActive = true,
+                            Name = "Khác",
+                            Slug = "khac"
+                        });
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.EventDocument", b =>
@@ -454,7 +496,14 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<Guid?>("PersonalOwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("PersonalOwnerUserId")
+                        .IsUnique()
+                        .HasFilter("[PersonalOwnerUserId] IS NOT NULL");
 
                     b.ToTable("Organizations", (string)null);
                 });
@@ -1173,6 +1222,14 @@ namespace EventGO.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("EventGO.Domain.Entities.Organization", b =>
+                {
+                    b.HasOne("EventGO.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("PersonalOwnerUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("EventGO.Domain.Entities.OrganizationMember", b =>

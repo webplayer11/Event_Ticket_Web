@@ -166,14 +166,19 @@ public class TicketService : ITicketService
             return new(null, TicketCheckInError.Forbidden);
         }
 
-        var ticket = await FindTicketForEventAsync(
+        var lookup = await FindTicketForEventAsync(
             eventId,
             qrToken,
             cancellationToken);
 
-        return ticket is null
-            ? new(null, TicketCheckInError.TicketNotFound)
-            : new(ticket, TicketCheckInError.None);
+        if (lookup is null)
+        {
+            return new(null, TicketCheckInError.TicketNotFound);
+        }
+
+        return lookup.IsUsable
+            ? new(lookup.Ticket, TicketCheckInError.None)
+            : new(lookup.Ticket, TicketCheckInError.TicketNotValid);
     }
 
     public async Task<TicketCheckInResult> CheckInAsync(
@@ -192,22 +197,24 @@ public class TicketService : ITicketService
             return new(null, TicketCheckInError.Forbidden);
         }
 
-        var found = await FindTicketForEventAsync(
+        var lookup = await FindTicketForEventAsync(
             eventId,
             request.QrToken,
             cancellationToken);
 
-        if (found is null)
+        if (lookup is null)
         {
             return new(null, TicketCheckInError.TicketNotFound);
         }
+
+        var found = lookup.Ticket;
 
         if (found.IsCheckedIn || found.Status == TicketStatus.Used.ToString())
         {
             return new(found, TicketCheckInError.AlreadyCheckedIn);
         }
 
-        if (found.Status != TicketStatus.Valid.ToString())
+        if (!lookup.IsUsable)
         {
             return new(found, TicketCheckInError.TicketNotValid);
         }
@@ -232,10 +239,13 @@ public class TicketService : ITicketService
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception)
+            when (exception is DbUpdateConcurrencyException
+                || exception.IsUniqueViolation())
         {
             // Hai cổng quét cùng một vé: RowVersion của Ticket hoặc
             // unique index CheckIns.TicketId chặn lượt thứ hai.
+            // Lỗi DB khác không bị che, để lộ ra thành 500 và được log.
             _dbContext.ChangeTracker.Clear();
             return new(found, TicketCheckInError.AlreadyCheckedIn);
         }
@@ -245,7 +255,15 @@ public class TicketService : ITicketService
         return new(found, TicketCheckInError.None);
     }
 
-    private async Task<TicketValidationResponse?> FindTicketForEventAsync(
+    /// <param name="IsUsable">
+    /// Vé còn hiệu lực, đơn hàng vẫn ở trạng thái đã thanh toán
+    /// (chưa hoàn tiền/hủy) và sự kiện chưa bị hủy.
+    /// </param>
+    private sealed record TicketLookup(
+        TicketValidationResponse Ticket,
+        bool IsUsable);
+
+    private async Task<TicketLookup?> FindTicketForEventAsync(
         Guid eventId,
         string qrToken,
         CancellationToken cancellationToken)
@@ -273,6 +291,8 @@ public class TicketService : ITicketService
                 ticket.Id,
                 ticket.TicketCode,
                 ticket.Status,
+                OrderStatus = order.Status,
+                EventStatus = evt.Status,
                 EventId = evt.Id,
                 evt.Title,
                 orderItem.TicketTypeName,
@@ -293,7 +313,11 @@ public class TicketService : ITicketService
                 c => c.TicketId == result.Id,
                 cancellationToken);
 
-        return new TicketValidationResponse
+        var isUsable = result.Status == TicketStatus.Valid
+            && result.OrderStatus == OrderStatus.Paid
+            && result.EventStatus != EventStatus.Cancelled;
+
+        var response = new TicketValidationResponse
         {
             TicketId = result.Id,
             TicketCode = result.TicketCode,
@@ -306,6 +330,8 @@ public class TicketService : ITicketService
             // Người soát vé chỉ cần đối chiếu, không cần email đầy đủ.
             CustomerEmail = MaskEmail(result.CustomerEmail)
         };
+
+        return new TicketLookup(response, isUsable);
     }
 
     private static string MaskEmail(string email)
