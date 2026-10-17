@@ -23,7 +23,7 @@ public sealed class UpdateTicketTypeStatusRequest
     public bool? IsActive { get; set; }
 }
 
-public sealed record TicketTypeResponse(Guid Id, Guid EventId, string Name,
+public sealed record ManagedTicketTypeResponse(Guid Id, Guid EventId, string Name,
     string Description, decimal Price, string Currency, int TotalQuantity,
     int AvailableQuantity, int MaxQuantityPerOrder, DateTimeOffset SaleStartsAt,
     DateTimeOffset SaleEndsAt, bool IsActive);
@@ -38,8 +38,8 @@ public sealed record TicketTypeResult<T>(T? Data, TicketTypeError Error = Ticket
 
 public interface ITicketTypeService
 {
-    Task<TicketTypeResult<TicketTypeResponse>> CreateAsync(Guid eventId, Guid userId, SaveTicketTypeRequest request, CancellationToken cancellationToken = default);
-    Task<TicketTypeResult<List<TicketTypeResponse>>> GetAsync(Guid eventId, Guid? userId, CancellationToken cancellationToken = default);
-    Task<TicketTypeResult<TicketTypeResponse>> UpdateAsync(Guid id, Guid userId, SaveTicketTypeRequest request, CancellationToken cancellationToken = default);
-    Task<TicketTypeResult<TicketTypeResponse>> SetStatusAsync(Guid id, Guid userId, bool isActive, CancellationToken cancellationToken = default);
+    Task<TicketTypeResult<ManagedTicketTypeResponse>> CreateAsync(Guid eventId, Guid userId, SaveTicketTypeRequest request, CancellationToken cancellationToken = default);
+    Task<TicketTypeResult<List<ManagedTicketTypeResponse>>> GetAsync(Guid eventId, Guid? userId, CancellationToken cancellationToken = default);
+    Task<TicketTypeResult<ManagedTicketTypeResponse>> UpdateAsync(Guid id, Guid userId, SaveTicketTypeRequest request, CancellationToken cancellationToken = default);
+    Task<TicketTypeResult<ManagedTicketTypeResponse>> SetStatusAsync(Guid id, Guid userId, bool isActive, CancellationToken cancellationToken = default);
 }
