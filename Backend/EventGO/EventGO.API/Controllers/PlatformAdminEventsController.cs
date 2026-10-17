@@ -8,9 +8,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EventGO.API.Controllers;
 
-/// <summary>Duyệt sự kiện. Chỉ PlatformAdmin.</summary>
+/// <summary>
+/// Duyệt sự kiện. Chỉ PlatformAdmin. Route chính: /api/admin/events;
+/// /api/platform-admin/events là alias cũ, giữ cho client đã tích hợp.
+/// </summary>
 [ApiController]
 [ProducesErrorResponseType(typeof(void))]
+[Route("api/admin/events")]
 [Route("api/platform-admin/events")]
 [Authorize(Policy = AuthorizationPolicies.PlatformAdmin)]
 [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -35,18 +39,14 @@ public sealed class PlatformAdminEventsController : ControllerBase
         [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
-        var filter = EventStatus.PendingApproval;
-        if (!string.IsNullOrWhiteSpace(status)
-            && (!Enum.TryParse(status, ignoreCase: true, out filter)
-                || !Enum.IsDefined(filter)
-                || int.TryParse(status, out _)))
+        if (!this.TryParseStatus(status, out var filter, out var statusError))
         {
-            return BadRequest(new MessageResponse(
-                "Trạng thái sự kiện không hợp lệ.",
-                [$"Giá trị hợp lệ: {string.Join(", ", Enum.GetNames<EventStatus>())}."]));
+            return statusError!;
         }
 
-        return Ok(await _reviewService.GetForReviewAsync(filter, cancellationToken));
+        return Ok(await _reviewService.GetForReviewAsync(
+            filter ?? EventStatus.PendingApproval,
+            cancellationToken));
     }
 
     /// <summary>Số sự kiện chờ duyệt, để hiện badge thông báo.</summary>
@@ -58,6 +58,7 @@ public sealed class PlatformAdminEventsController : ControllerBase
             Count = await _reviewService.CountPendingAsync(cancellationToken)
         });
 
+    /// <summary>PendingApproval → Approved. Tổ chức tự xuất bản sau đó.</summary>
     [HttpPost("{eventId:guid}/approve")]
     [ProducesResponseType(typeof(ManagedEventResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status400BadRequest, "application/json")]

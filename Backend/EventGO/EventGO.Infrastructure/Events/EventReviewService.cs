@@ -51,7 +51,7 @@ public sealed class EventReviewService : IEventReviewService
             return new(null, EventError.NotFound);
         }
 
-        if (evt.Status != EventStatus.PendingApproval)
+        if (!EventStatusTransitions.CanTransition(evt.Status, EventStatus.Approved))
         {
             return new(null, EventError.InvalidStatus);
         }
@@ -62,8 +62,8 @@ public sealed class EventReviewService : IEventReviewService
             return new(null, EventError.Invalid, ["Sự kiện đã kết thúc, không thể duyệt."]);
         }
 
-        evt.Status = EventStatus.Published;
-        evt.PublishedAt = now;
+        // Duyệt chưa công khai: tổ chức tự xuất bản (POST /api/events/{id}/publish).
+        evt.Status = EventStatus.Approved;
         evt.UpdatedAt = now;
 
         return await SaveReviewAsync(
@@ -95,7 +95,7 @@ public sealed class EventReviewService : IEventReviewService
             return new(null, EventError.NotFound);
         }
 
-        if (evt.Status != EventStatus.PendingApproval)
+        if (!EventStatusTransitions.CanTransition(evt.Status, EventStatus.Rejected))
         {
             return new(null, EventError.InvalidStatus);
         }
