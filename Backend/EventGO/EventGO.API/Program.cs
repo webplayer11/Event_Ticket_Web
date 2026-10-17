@@ -17,6 +17,8 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
 {
+    options.OperationFilter<EventGO.API.Swagger.ValidationProblemResponseOperationFilter>();
+
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "EventGO API",

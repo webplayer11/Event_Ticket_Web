@@ -18,13 +18,9 @@ public sealed class EventReviewService : IEventReviewService
     }
 
     public async Task<List<ManagedEventResponse>> GetForReviewAsync(
-        string? status,
+        EventStatus filter,
         CancellationToken cancellationToken = default)
     {
-        var filter = Enum.TryParse<EventStatus>(status, ignoreCase: true, out var parsed)
-            ? parsed
-            : EventStatus.PendingApproval;
-
         var events = await EventReadModel.LoadAsync(
             _dbContext,
             _dbContext.Events.Where(x => x.Status == filter),

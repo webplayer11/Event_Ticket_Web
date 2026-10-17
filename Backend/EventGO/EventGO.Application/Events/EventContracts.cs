@@ -150,18 +150,8 @@ public class ManagedEventResponse : EventResponse
     public DateTimeOffset? LastReviewedAt { get; set; }
 }
 
-public class EventCategoryResponse
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Slug { get; set; } = string.Empty;
-}
-
 public interface IEventService
 {
-    Task<List<EventCategoryResponse>> GetCategoriesAsync(
-        CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Tạo sự kiện ở trạng thái chờ duyệt và báo cho PlatformAdmin.
     /// </summary>
@@ -197,7 +187,7 @@ public interface IEventService
 public interface IEventReviewService
 {
     Task<List<ManagedEventResponse>> GetForReviewAsync(
-        string? status,
+        Domain.Enums.EventStatus status,
         CancellationToken cancellationToken = default);
 
     Task<int> CountPendingAsync(CancellationToken cancellationToken = default);
@@ -215,6 +205,11 @@ public interface IEventReviewService
         Guid adminUserId,
         ReviewEventRequest request,
         CancellationToken cancellationToken = default);
+}
+
+public class EventPendingCountResponse
+{
+    public int Count { get; set; }
 }
 
 public sealed record EventSubmittedNotification(
