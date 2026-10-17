@@ -147,6 +147,23 @@ public sealed class ReservationService
             return duplicateResult;
         }
 
+        // Re-read under the SAME row locks used by ticket administration.
+        // The earlier read is only an early validation; it cannot be the source
+        // of the persisted price snapshot or final sale eligibility decision.
+        ticketTypes.Clear();
+        foreach (var id in requestedIds.Order())
+        {
+            var lockedType = await TicketTypeLock.LoadAsync(_dbContext, id, cancellationToken);
+            if (lockedType is not null) ticketTypes.Add(id, lockedType);
+        }
+        validationError = ValidateItems(request, ticketTypes, _timeProvider.GetUtcNow());
+        if (validationError != ReservationError.None)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+            return new(validationError);
+        }
+
         foreach (var item in request.Items.OrderBy(x => x.TicketTypeId))
         {
             var reserveResult = await _databaseOperations.ReserveInventoryAsync(
