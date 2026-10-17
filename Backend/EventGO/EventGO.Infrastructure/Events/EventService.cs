@@ -26,20 +26,6 @@ public sealed class EventService : IEventService
         _timeProvider = timeProvider;
     }
 
-    public Task<List<EventCategoryResponse>> GetCategoriesAsync(
-        CancellationToken cancellationToken = default) =>
-        _dbContext.EventCategories
-            .AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Name)
-            .Select(x => new EventCategoryResponse
-            {
-                Id = x.Id,
-                Name = x.Name,
-                Slug = x.Slug
-            })
-            .ToListAsync(cancellationToken);
-
     public async Task<EventResult<ManagedEventResponse>> CreateAsync(
         Guid currentUserId,
         SaveEventRequest request,

@@ -182,6 +182,7 @@ public static class DependencyInjection
         services.AddScoped<IOrganizationService, OrganizationService>();
         services.AddScoped<IEventStaffService, EventStaffService>();
         services.AddScoped<IEventService, EventService>();
+        services.AddScoped<IEventCategoryService, EventCategoryService>();
         services.AddScoped<IEventReviewService, EventReviewService>();
         services.AddScoped<IEventApprovalNotifier, SmtpEventApprovalNotifier>();
         services.AddOptions<EventApprovalOptions>()
