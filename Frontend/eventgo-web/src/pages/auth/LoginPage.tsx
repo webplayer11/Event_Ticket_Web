@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Lock, Mail, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
 import { api, ApiError, setAccessToken } from "../../services/api";
@@ -26,6 +26,8 @@ type OrganizationResponse = {
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
   const { login } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,8 +76,10 @@ export const LoginPage = () => {
         auth.accessToken
       );
 
-      // Điều hướng tương ứng với quyền của tài khoản
-      if (determinedRole === "Admin") {
+      // Điều hướng: nếu có trang đích trước đó (ví dụ từ /organizer) thì quay lại đó
+      if (from) {
+        navigate(from, { replace: true });
+      } else if (determinedRole === "Admin") {
         navigate("/admin");
       } else if (determinedRole === "Organizer") {
         navigate("/organizer");

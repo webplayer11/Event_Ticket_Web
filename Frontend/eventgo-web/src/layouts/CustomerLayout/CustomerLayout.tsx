@@ -1,11 +1,21 @@
 import { useState, useEffect } from "react";
-import { Link, Outlet, useNavigate, useSearchParams } from "react-router-dom";
-import { Ticket, User, Sparkles, Shield, Briefcase, Search, X } from "lucide-react";
+import { Link, Outlet, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { Ticket, User, Sparkles, Shield, Briefcase, Search, X, ChevronDown } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
+
+const navCategories = [
+  { label: "Âm nhạc", slug: "am-nhac", icon: "♫" },
+  { label: "Sân khấu", slug: "san-khau", icon: "✦" },
+  { label: "Thể thao", slug: "the-thao", icon: "⚽" },
+  { label: "Hội thảo", slug: "hoi-thao", icon: "◫" },
+  { label: "Điện ảnh", slug: "dien-anh", icon: "▶" },
+  { label: "Workshop", slug: "workshop", icon: "✎" },
+];
 
 export const CustomerLayout = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
 
@@ -29,6 +39,19 @@ export const CustomerLayout = () => {
   const handleClearSearch = () => {
     setSearchQuery("");
     navigate("/");
+  };
+
+  const handleNavigateCategory = (slug: string) => {
+    if (location.pathname === "/") {
+      const el = document.getElementById(`category-${slug}`);
+      if (el) {
+        const yOffset = -120;
+        const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: "smooth" });
+      }
+    } else {
+      navigate(`/#category-${slug}`);
+    }
   };
 
   return (

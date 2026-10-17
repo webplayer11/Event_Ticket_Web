@@ -16,12 +16,58 @@ type EventItem = {
 
 
 const categories = [
-  { label: "Âm nhạc", icon: "♫" },
-  { label: "Sân khấu", icon: "✦" },
-  { label: "Thể thao", icon: "⚽" },
-  { label: "Hội thảo", icon: "◫" },
-  { label: "Điện ảnh", icon: "▶" },
-  { label: "Workshop", icon: "✎" },
+  { label: "Tất cả", slug: "all", icon: "❖" },
+  { label: "Âm nhạc", slug: "am-nhac", icon: "♫" },
+  { label: "Sân khấu", slug: "san-khau", icon: "✦" },
+  { label: "Thể thao", slug: "the-thao", icon: "⚽" },
+  { label: "Hội thảo", slug: "hoi-thao", icon: "◫" },
+  { label: "Điện ảnh", slug: "dien-anh", icon: "▶" },
+  { label: "Workshop", slug: "workshop", icon: "✎" },
+];
+
+export const categoryConfigs = [
+  {
+    label: "Âm nhạc",
+    slug: "am-nhac",
+    icon: "♫",
+    kicker: "CONCERT & LIVE MUSIC",
+    description: "Đắm chìm trong không gian âm thanh bùng nổ, ánh sáng mãn nhãn cùng những nghệ sĩ hàng đầu.",
+  },
+  {
+    label: "Sân khấu",
+    slug: "san-khau",
+    icon: "✦",
+    kicker: "THEATRE & PERFORMING ARTS",
+    description: "Những tác phẩm kịch đương đại, nghệ thuật biểu diễn sâu lắng và lay động lòng người.",
+  },
+  {
+    label: "Thể thao",
+    slug: "the-thao",
+    icon: "⚽",
+    kicker: "SPORTS & OUTDOOR",
+    description: "Khơi dậy tinh thần bứt phá với các giải chạy đêm, giải đấu phong trào và sự kiện thể thao cộng đồng.",
+  },
+  {
+    label: "Hội thảo",
+    slug: "hoi-thao",
+    icon: "◫",
+    kicker: "CONFERENCES & FORUMS",
+    description: "Cập nhật kiến thức chuyên sâu, xu hướng đổi mới sáng tạo và cơ hội kết nối với các chuyên gia đầu ngành.",
+  },
+  {
+    label: "Điện ảnh",
+    slug: "dien-anh",
+    icon: "▶",
+    kicker: "CINEMA & EXHIBITIONS",
+    description: "Thưởng thức các tuần lễ phim độc lập, triển lãm nghệ thuật thị giác và không gian tương tác đa chiều.",
+  },
+  {
+    label: "Workshop",
+    slug: "workshop",
+    icon: "✎",
+    kicker: "CREATIVE WORKSHOPS",
+    description: "Thực hành kỹ năng thực tế, trải nghiệm văn hóa ẩm thực, thủ công sáng tạo và lối sống lành mạnh.",
+  },
 ];
 
 const events: EventItem[] = [
@@ -122,6 +168,22 @@ const events: EventItem[] = [
     price: "Từ 220.000đ",
     category: "Sân khấu",
   },
+  {
+    id: 13,
+    title: "Saigon City Marathon 2026 — Sải bước tương lai",
+    date: "05:00 · 22.11.2026",
+    place: "Khu đô thị Sala, TP. Hồ Chí Minh",
+    price: "Từ 550.000đ",
+    category: "Thể thao",
+  },
+  {
+    id: 14,
+    title: "Saigon Indie Film Showcase — Tuần lễ điện ảnh trẻ",
+    date: "19:00 · 28.11.2026",
+    place: "DCINE Bến Thành, TP. Hồ Chí Minh",
+    price: "Từ 150.000đ",
+    category: "Điện ảnh",
+  },
 ];
 
 
@@ -182,18 +244,58 @@ export const HomePage = () => {
   }), [query, activeCategory]);
 
   const toggleLike = (id: number) => setLiked((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  const selectCategory = (label: string) => {
-    setActiveCategory(activeCategory === label ? "Tất cả" : label);
-    requestAnimationFrame(() => document.getElementById("events")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+
+  const scrollToCategory = (slug: string, label: string) => {
+    setActiveCategory(label);
+    if (slug === "all") {
+      const el = document.getElementById("events");
+      if (el) {
+        const yOffset = -120;
+        const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: "smooth" });
+      }
+      return;
+    }
+    const el = document.getElementById(`category-${slug}`);
+    if (el) {
+      const yOffset = -120;
+      const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
   };
+
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith("#category-")) {
+        const targetId = hash.substring(1);
+        const el = document.getElementById(targetId);
+        if (el) {
+          setTimeout(() => {
+            const yOffset = -120;
+            const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+            window.scrollTo({ top: y, behavior: "smooth" });
+          }, 150);
+        }
+      }
+    };
+
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   return (
     <div className="home-container">
       {/* Category Strip */}
-      <nav className="category-nav" aria-label="Danh mục sự kiện">
+      <nav className="category-nav sticky top-16 z-20 bg-[#0d1117]/95 backdrop-blur border-b border-slate-800" aria-label="Danh mục sự kiện">
         <div className="category-strip shell">
           {categories.map((category) => (
-            <button key={category.label} className={activeCategory === category.label ? "active" : ""} onClick={() => selectCategory(category.label)}>
+            <button
+              key={category.label}
+              className={activeCategory === category.label ? "active" : ""}
+              onClick={() => scrollToCategory(category.slug, category.label)}
+            >
               <span>{category.icon}</span>{category.label}
             </button>
           ))}
@@ -285,6 +387,82 @@ export const HomePage = () => {
         </div>
         {visibleEvents.length === 0 && <div className="empty-state"><span>⌕</span><h3>Chưa tìm thấy sự kiện</h3><p>Thử từ khóa khác hoặc chọn lại danh mục.</p></div>}
       </section>
+
+      {/* KHU VỰC TỪNG THỂ LOẠI */}
+      <div className="category-sections space-y-16 py-8">
+        {categoryConfigs.map((cat) => {
+          const categoryEvents = events.filter((e) => e.category === cat.label);
+          if (categoryEvents.length === 0) return null;
+
+          return (
+            <section
+              key={cat.slug}
+              id={`category-${cat.slug}`}
+              className="section shell scroll-mt-28"
+            >
+              <div className="section-head mb-6">
+                <div>
+                  <h2 className="text-2xl font-black text-white !text-white tracking-tight">
+                    {cat.label}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                    {cat.description}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-200 border border-slate-700/80 font-semibold">
+                    {categoryEvents.length} sự kiện
+                  </span>
+                  <button
+                    className="text-link"
+                    onClick={() => {
+                      if (categoryEvents.length > 0) {
+                        setSelectedEvent(categoryEvents[0]);
+                      }
+                    }}
+                  >
+                    Xem nổi bật <Icon name="arrow" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="event-grid">
+                {categoryEvents.map((event) => (
+                  <article className="event-card" key={event.id}>
+                    <div className="event-image">
+                      <RenderEventImage image={event.image} title={event.title} category={event.category} />
+                      <span className="event-tag">{event.category}</span>
+                      <button
+                        onClick={() => toggleLike(event.id)}
+                        className={liked.includes(event.id) ? "liked" : ""}
+                        aria-label="Lưu sự kiện"
+                      >
+                        <Icon name="heart" />
+                      </button>
+                    </div>
+                    <div className="event-copy">
+                      <p className="date">{event.date}</p>
+                      <h3>{event.title}</h3>
+                      <p className="place"><Icon name="pin" />{event.place}</p>
+                      <div>
+                        <strong>{event.price}</strong>
+                        <button
+                          className="card-arrow"
+                          onClick={() => setSelectedEvent(event)}
+                          aria-label={`Xem ${event.title}`}
+                        >
+                          <Icon name="arrow" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
 
       {/* Selected Event Modal */}
       {selectedEvent && (
