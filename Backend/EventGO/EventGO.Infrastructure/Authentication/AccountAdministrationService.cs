@@ -24,6 +24,29 @@ public sealed class AccountAdministrationService
         _dbContext = dbContext;
     }
 
+    public async Task<AdminUserResponse?> FindUserByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByEmailAsync(email.Trim());
+        if (user is null)
+        {
+            return null;
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        return new AdminUserResponse
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            PhoneNumber = user.PhoneNumber,
+            SystemRoles = roles.Order(StringComparer.Ordinal).ToArray(),
+            CreatedAt = user.CreatedAt,
+            IsActive = user.IsActive
+        };
+    }
+
     public async Task<AccountAdministrationResult> AssignSystemRoleAsync(
         Guid actorUserId,
         Guid targetUserId,
