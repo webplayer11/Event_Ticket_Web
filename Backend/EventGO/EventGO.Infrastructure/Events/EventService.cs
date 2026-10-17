@@ -7,6 +7,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventGO.Infrastructure.Events;
 
+/// <summary>
+/// Tạo/sửa sự kiện và các bước đổi trạng thái do tổ chức thực hiện
+/// (gửi duyệt, xuất bản, hủy). Duyệt/từ chối nằm ở EventReviewService.
+/// </summary>
 public sealed class EventService : IEventService
 {
     private readonly EventGoDbContext _dbContext;
@@ -26,42 +30,37 @@ public sealed class EventService : IEventService
         _timeProvider = timeProvider;
     }
 
-    public async Task<EventResult<ManagedEventResponse>> CreateAsync(
+    public async Task<EventResult<ManagedEventResponse>> CreateAndSubmitAsync(
         Guid currentUserId,
         SaveEventRequest request,
         CancellationToken cancellationToken = default)
     {
-        var validationErrors = Validate(request);
+        var validationErrors = Validate(request, request.TicketTypes ?? []);
+        if (request.TicketTypes is not { Count: > 0 })
+        {
+            validationErrors.Add("Sự kiện phải có ít nhất một loại vé.");
+        }
+
         if (validationErrors.Count > 0)
         {
             return new(null, EventError.Invalid, validationErrors);
         }
 
-        if (!await CategoryExistsAsync(request.CategoryId, cancellationToken))
+        if (!await CategoryIsActiveAsync(request.CategoryId, cancellationToken))
         {
             return new(null, EventError.CategoryNotFound);
         }
 
-        var user = await _dbContext.Users
-            .AsNoTracking()
-            .SingleAsync(x => x.Id == currentUserId, cancellationToken);
-
         Guid organizationId;
         if (request.OrganizationId is { } requestedOrganizationId)
         {
-            var membership = await _authorizer.GetMembershipAsync(
+            var accessError = await CheckOrganizationAccessAsync(
                 requestedOrganizationId,
                 currentUserId,
                 cancellationToken);
-
-            if (membership is null)
+            if (accessError != EventError.None)
             {
-                return new(null, EventError.NotFound);
-            }
-
-            if (!OrganizationPermissions.CanManageEvents(membership.Role))
-            {
-                return new(null, EventError.Forbidden);
+                return new(null, accessError);
             }
 
             organizationId = requestedOrganizationId;
@@ -69,7 +68,7 @@ public sealed class EventService : IEventService
         else
         {
             var personalOrganizationId = await GetOrCreatePersonalOrganizationAsync(
-                user,
+                currentUserId,
                 request,
                 cancellationToken);
 
@@ -82,29 +81,14 @@ public sealed class EventService : IEventService
             organizationId = personalOrganizationId.Value;
         }
 
+        // Tạo nháp rồi gửi duyệt ngay trong cùng một lần lưu:
+        // lịch sử ghi bước Draft → PendingApproval.
         var now = _timeProvider.GetUtcNow();
-        var evt = new Event
-        {
-            OrganizationId = organizationId,
-            CategoryId = request.CategoryId,
-            CreatedByUserId = currentUserId,
-            Slug = SlugGenerator.Create(request.Title),
-            Status = EventStatus.PendingApproval,
-            CreatedAt = now
-        };
-        ApplyFields(evt, request);
-
+        var evt = NewEvent(organizationId, currentUserId, request, now);
+        evt.Status = EventStatus.PendingApproval;
         _dbContext.Events.Add(evt);
-        AddTicketTypes(evt.Id, request.TicketTypes);
-        _dbContext.EventApprovalHistories.Add(new EventApprovalHistory
-        {
-            EventId = evt.Id,
-            FromStatus = EventStatus.Draft,
-            ToStatus = EventStatus.PendingApproval,
-            ActionByUserId = currentUserId,
-            Note = "Gửi duyệt sự kiện mới.",
-            CreatedAt = now
-        });
+        AddTicketTypes(evt.Id, request.TicketTypes!);
+        AddHistory(evt, EventStatus.Draft, currentUserId, "Gửi duyệt sự kiện mới.", now);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -116,49 +100,89 @@ public sealed class EventService : IEventService
         return new(response, EventError.None);
     }
 
-    public async Task<EventResult<ManagedEventResponse>> UpdateAsync(
-        Guid eventId,
+    public async Task<EventResult<ManagedEventResponse>> CreateDraftAsync(
+        Guid organizationId,
         Guid currentUserId,
-        SaveEventRequest request,
+        EventDetailsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var membership = await _authorizer.GetMembershipForEventAsync(
-            eventId,
+        var accessError = await CheckOrganizationAccessAsync(
+            organizationId,
             currentUserId,
             cancellationToken);
-
-        if (membership is null)
+        if (accessError != EventError.None)
         {
-            return new(null, EventError.NotFound);
+            return new(null, accessError);
         }
 
-        if (!OrganizationPermissions.CanManageEvents(membership.Role))
-        {
-            return new(null, EventError.Forbidden);
-        }
-
-        var evt = await _dbContext.Events
-            .SingleAsync(x => x.Id == eventId, cancellationToken);
-
-        // Sự kiện đã công khai có thể đã bán vé, không cho sửa tự do.
-        if (evt.Status is not (EventStatus.PendingApproval or EventStatus.Rejected))
-        {
-            return new(null, EventError.InvalidStatus);
-        }
-
-        var validationErrors = Validate(request);
+        var validationErrors = Validate(request, request.TicketTypes ?? []);
         if (validationErrors.Count > 0)
         {
             return new(null, EventError.Invalid, validationErrors);
         }
 
-        if (!await CategoryExistsAsync(request.CategoryId, cancellationToken))
+        if (!await CategoryIsActiveAsync(request.CategoryId, cancellationToken))
         {
             return new(null, EventError.CategoryNotFound);
         }
 
         var now = _timeProvider.GetUtcNow();
-        var wasRejected = evt.Status == EventStatus.Rejected;
+        var evt = NewEvent(organizationId, currentUserId, request, now);
+        _dbContext.Events.Add(evt);
+        AddTicketTypes(evt.Id, request.TicketTypes ?? []);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new(await LoadManagedAsync(evt.Id, cancellationToken), EventError.None);
+    }
+
+    public async Task<EventResult<ManagedEventResponse>> UpdateAsync(
+        Guid eventId,
+        Guid currentUserId,
+        EventDetailsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var accessError = await CheckEventAccessAsync(eventId, currentUserId, cancellationToken);
+        if (accessError != EventError.None)
+        {
+            return new(null, accessError);
+        }
+
+        var evt = await _dbContext.Events
+            .SingleAsync(x => x.Id == eventId, cancellationToken);
+
+        // Đang chờ duyệt hoặc đã duyệt/công khai: không sửa tự do được.
+        if (!EventStatusTransitions.IsEditable(evt.Status))
+        {
+            return new(null, EventError.InvalidStatus);
+        }
+
+        // Không gửi loại vé: các loại vé hiện có vẫn phải hợp lệ với thời gian mới.
+        var ticketTypesToCheck = request.TicketTypes
+            ?? await _dbContext.TicketTypes
+                .AsNoTracking()
+                .Where(x => x.EventId == eventId && x.IsActive)
+                .Select(x => new TicketTypeRequest
+                {
+                    Name = x.Name,
+                    Price = x.Price,
+                    TotalQuantity = x.TotalQuantity,
+                    MaxQuantityPerOrder = x.MaxQuantityPerOrder,
+                    SaleStartsAt = x.SaleStartsAt,
+                    SaleEndsAt = x.SaleEndsAt
+                })
+                .ToListAsync(cancellationToken);
+
+        var validationErrors = Validate(request, ticketTypesToCheck);
+        if (validationErrors.Count > 0)
+        {
+            return new(null, EventError.Invalid, validationErrors);
+        }
+
+        if (!await CategoryIsActiveAsync(request.CategoryId, cancellationToken))
+        {
+            return new(null, EventError.CategoryNotFound);
+        }
 
         await using var transaction =
             await _dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -166,131 +190,273 @@ public sealed class EventService : IEventService
         try
         {
             evt.CategoryId = request.CategoryId;
-            evt.UpdatedAt = now;
+            evt.UpdatedAt = _timeProvider.GetUtcNow();
             ApplyFields(evt, request);
 
-            if (wasRejected)
+            if (request.TicketTypes is not null)
             {
-                evt.Status = EventStatus.PendingApproval;
-                _dbContext.EventApprovalHistories.Add(new EventApprovalHistory
-                {
-                    EventId = evt.Id,
-                    FromStatus = EventStatus.Rejected,
-                    ToStatus = EventStatus.PendingApproval,
-                    ActionByUserId = currentUserId,
-                    Note = "Gửi duyệt lại sau khi chỉnh sửa.",
-                    CreatedAt = now
-                });
+                // Draft/Rejected chưa từng công khai nên chưa có giữ chỗ/đơn hàng:
+                // thay toàn bộ loại vé. Xóa trước, lưu, rồi thêm mới để không
+                // vướng unique index (EventId, Name).
+                var oldTicketTypes = await _dbContext.TicketTypes
+                    .Where(x => x.EventId == evt.Id)
+                    .ToListAsync(cancellationToken);
+                _dbContext.TicketTypes.RemoveRange(oldTicketTypes);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                AddTicketTypes(evt.Id, request.TicketTypes);
             }
 
-            // Sự kiện chưa công khai nên chưa có giữ chỗ/đơn hàng:
-            // thay toàn bộ loại vé. Xóa trước, lưu, rồi thêm mới để không
-            // vướng unique index (EventId, Name).
-            var oldTicketTypes = await _dbContext.TicketTypes
-                .Where(x => x.EventId == evt.Id)
-                .ToListAsync(cancellationToken);
-            _dbContext.TicketTypes.RemoveRange(oldTicketTypes);
             await _dbContext.SaveChangesAsync(cancellationToken);
-
-            AddTicketTypes(evt.Id, request.TicketTypes);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            // Admin vừa duyệt/từ chối sự kiện trong lúc người dùng sửa.
+            // Sự kiện vừa được gửi duyệt/đổi trạng thái trong lúc đang sửa.
             await transaction.RollbackAsync(cancellationToken);
             _dbContext.ChangeTracker.Clear();
             return new(null, EventError.Conflict);
         }
 
-        var response = await LoadManagedAsync(evt.Id, cancellationToken);
-
-        if (wasRejected)
-        {
-            await _notifier.NotifyAdminsAsync(
-                ToNotification(response, isResubmission: true),
-                cancellationToken);
-        }
-
-        return new(response, EventError.None);
+        return new(await LoadManagedAsync(evt.Id, cancellationToken), EventError.None);
     }
 
-    public async Task<List<ManagedEventResponse>> GetManagedAsync(
+    public async Task<EventResult<ManagedEventResponse>> SubmitAsync(
+        Guid eventId,
         Guid currentUserId,
         CancellationToken cancellationToken = default)
     {
-        var organizationIds = await (
-            from member in _dbContext.OrganizationMembers.AsNoTracking()
-            join organization in _dbContext.Organizations.AsNoTracking()
-                on member.OrganizationId equals organization.Id
-            where member.UserId == currentUserId
-                && member.IsActive
-                && organization.IsActive
-                && (member.Role == OrganizationMemberRole.Owner
-                    || member.Role == OrganizationMemberRole.Manager)
-            select member.OrganizationId
-        ).ToListAsync(cancellationToken);
-
-        var events = await EventReadModel.LoadAsync(
-            _dbContext,
-            _dbContext.Events.Where(x => organizationIds.Contains(x.OrganizationId)),
+        var (evt, error) = await LoadForTransitionAsync(
+            eventId,
+            currentUserId,
+            EventStatus.PendingApproval,
             cancellationToken);
+        if (evt is null)
+        {
+            return new(null, error);
+        }
 
-        return events.OrderByDescending(x => x.CreatedAt).ToList();
-    }
-
-    public async Task<List<EventResponse>> GetPublishedAsync(
-        CancellationToken cancellationToken = default)
-    {
         var now = _timeProvider.GetUtcNow();
-        var events = await EventReadModel.LoadAsync(
-            _dbContext,
-            PublishedEvents(),
+        var errors = new List<string>();
+        if (evt.StartsAt <= now)
+        {
+            errors.Add("Thời gian bắt đầu phải ở tương lai.");
+        }
+
+        if (!await HasActiveTicketTypeAsync(evt.Id, cancellationToken))
+        {
+            errors.Add("Sự kiện phải có ít nhất một loại vé.");
+        }
+
+        if (errors.Count > 0)
+        {
+            return new(null, EventError.Invalid, errors);
+        }
+
+        // Thể loại có thể bị Admin tắt sau khi tạo nháp.
+        if (!await CategoryIsActiveAsync(evt.CategoryId, cancellationToken))
+        {
+            return new(null, EventError.CategoryNotFound);
+        }
+
+        var isResubmission = evt.Status == EventStatus.Rejected;
+        var result = await ChangeStatusAsync(
+            evt,
+            EventStatus.PendingApproval,
+            currentUserId,
+            isResubmission ? "Gửi duyệt lại sau khi chỉnh sửa." : "Gửi duyệt sự kiện.",
+            now,
             cancellationToken);
 
-        return events
-            .Where(x => x.EndsAt > now)
-            .OrderBy(x => x.StartsAt)
-            .Select(EventReadModel.ToPublic)
-            .ToList();
+        if (result.Data is not null)
+        {
+            await _notifier.NotifyAdminsAsync(
+                ToNotification(result.Data, isResubmission),
+                cancellationToken);
+        }
+
+        return result;
     }
 
-    public async Task<EventResponse?> GetPublishedByIdAsync(
+    public async Task<EventResult<ManagedEventResponse>> PublishAsync(
         Guid eventId,
+        Guid currentUserId,
         CancellationToken cancellationToken = default)
     {
-        var events = await EventReadModel.LoadAsync(
-            _dbContext,
-            PublishedEvents().Where(x => x.Id == eventId),
+        var (evt, error) = await LoadForTransitionAsync(
+            eventId,
+            currentUserId,
+            EventStatus.Published,
             cancellationToken);
+        if (evt is null)
+        {
+            return new(null, error);
+        }
 
-        return events.Count == 0 ? null : EventReadModel.ToPublic(events[0]);
+        var now = _timeProvider.GetUtcNow();
+        var errors = new List<string>();
+        if (evt.EndsAt <= now)
+        {
+            errors.Add("Sự kiện đã kết thúc, không thể xuất bản.");
+        }
+
+        // Loại vé có thể bị tắt qua API ticket-types sau khi được duyệt.
+        if (!await HasActiveTicketTypeAsync(evt.Id, cancellationToken))
+        {
+            errors.Add("Sự kiện phải có ít nhất một loại vé đang mở.");
+        }
+
+        if (errors.Count > 0)
+        {
+            return new(null, EventError.Invalid, errors);
+        }
+
+        evt.PublishedAt = now;
+        return await ChangeStatusAsync(
+            evt,
+            EventStatus.Published,
+            currentUserId,
+            "Xuất bản sự kiện.",
+            now,
+            cancellationToken);
     }
 
-    // Chỉ sự kiện đã duyệt, thuộc tổ chức đang hoạt động.
-    private IQueryable<Event> PublishedEvents() =>
-        from evt in _dbContext.Events
-        join organization in _dbContext.Organizations
-            on evt.OrganizationId equals organization.Id
-        where evt.Status == EventStatus.Published && organization.IsActive
-        select evt;
+    public async Task<EventResult<ManagedEventResponse>> CancelAsync(
+        Guid eventId,
+        Guid currentUserId,
+        CancelEventRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var (evt, error) = await LoadForTransitionAsync(
+            eventId,
+            currentUserId,
+            EventStatus.Cancelled,
+            cancellationToken);
+        if (evt is null)
+        {
+            return new(null, error);
+        }
+
+        // Chưa có chính sách hoàn tiền: không hủy khi đã có vé giữ chỗ/bán.
+        var hasCommittedTickets = await _dbContext.TicketTypes.AnyAsync(
+            x => x.EventId == evt.Id && (x.SoldQuantity > 0 || x.ReservedQuantity > 0),
+            cancellationToken);
+        if (hasCommittedTickets)
+        {
+            return new(null, EventError.TicketsSold);
+        }
+
+        return await ChangeStatusAsync(
+            evt,
+            EventStatus.Cancelled,
+            currentUserId,
+            request.Reason?.Trim() is { Length: > 0 } reason ? reason : "Hủy sự kiện.",
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Kiểm tra quyền Owner/Manager trên tổ chức sở hữu sự kiện và luồng trạng thái.
+    /// </summary>
+    private async Task<(Event? Event, EventError Error)> LoadForTransitionAsync(
+        Guid eventId,
+        Guid currentUserId,
+        EventStatus targetStatus,
+        CancellationToken cancellationToken)
+    {
+        var accessError = await CheckEventAccessAsync(eventId, currentUserId, cancellationToken);
+        if (accessError != EventError.None)
+        {
+            return (null, accessError);
+        }
+
+        var evt = await _dbContext.Events
+            .SingleAsync(x => x.Id == eventId, cancellationToken);
+
+        return EventStatusTransitions.CanTransition(evt.Status, targetStatus)
+            ? (evt, EventError.None)
+            : (null, EventError.InvalidStatus);
+    }
+
+    private async Task<EventResult<ManagedEventResponse>> ChangeStatusAsync(
+        Event evt,
+        EventStatus targetStatus,
+        Guid currentUserId,
+        string note,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var fromStatus = evt.Status;
+        evt.Status = targetStatus;
+        evt.UpdatedAt = now;
+        AddHistory(evt, fromStatus, currentUserId, note, now);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // RowVersion: người khác vừa đổi trạng thái hoặc sửa sự kiện.
+            _dbContext.ChangeTracker.Clear();
+            return new(null, EventError.Conflict);
+        }
+
+        return new(await LoadManagedAsync(evt.Id, cancellationToken), EventError.None);
+    }
+
+    private async Task<EventError> CheckOrganizationAccessAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var membership = await _authorizer.GetMembershipAsync(
+            organizationId,
+            currentUserId,
+            cancellationToken);
+
+        return ToAccessError(membership);
+    }
+
+    private async Task<EventError> CheckEventAccessAsync(
+        Guid eventId,
+        Guid currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var membership = await _authorizer.GetMembershipForEventAsync(
+            eventId,
+            currentUserId,
+            cancellationToken);
+
+        return ToAccessError(membership);
+    }
+
+    // Không thuộc tổ chức → 404 (không lộ sự tồn tại); Staff → 403.
+    private static EventError ToAccessError(OrganizationMembership? membership) =>
+        membership is null
+            ? EventError.NotFound
+            : OrganizationPermissions.CanManageEvents(membership.Role)
+                ? EventError.None
+                : EventError.Forbidden;
 
     /// <summary>
     /// Tổ chức cá nhân của người dùng, tự tạo ở lần đầu.
     /// Trả null nếu tổ chức cá nhân đã bị khóa.
     /// </summary>
     private async Task<Guid?> GetOrCreatePersonalOrganizationAsync(
-        Identity.ApplicationUser user,
+        Guid userId,
         SaveEventRequest request,
         CancellationToken cancellationToken)
     {
-        var existing = await FindPersonalOrganizationAsync(user.Id, cancellationToken);
+        var existing = await FindPersonalOrganizationAsync(userId, cancellationToken);
         if (existing is not null)
         {
             return existing.Value.IsActive ? existing.Value.Id : null;
         }
+
+        var user = await _dbContext.Users
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == userId, cancellationToken);
 
         var organization = new Organization
         {
@@ -324,7 +490,7 @@ public sealed class EventService : IEventService
             // Hai sự kiện đầu tiên được tạo cùng lúc: request kia đã tạo
             // tổ chức cá nhân trước, dùng lại tổ chức đó.
             _dbContext.ChangeTracker.Clear();
-            var created = await FindPersonalOrganizationAsync(user.Id, cancellationToken);
+            var created = await FindPersonalOrganizationAsync(userId, cancellationToken);
             return created is { IsActive: true } ? created.Value.Id : null;
         }
     }
@@ -342,7 +508,9 @@ public sealed class EventService : IEventService
         return row is null ? null : (row.Id, row.IsActive);
     }
 
-    private List<string> Validate(SaveEventRequest request)
+    private List<string> Validate(
+        EventDetailsRequest request,
+        IReadOnlyCollection<TicketTypeRequest> ticketTypes)
     {
         var errors = new List<string>();
         var now = _timeProvider.GetUtcNow();
@@ -362,12 +530,7 @@ public sealed class EventService : IEventService
             errors.Add("Thời gian kết thúc phải sau thời gian bắt đầu.");
         }
 
-        if (request.TicketTypes.Count == 0)
-        {
-            errors.Add("Sự kiện phải có ít nhất một loại vé.");
-        }
-
-        var duplicateNames = request.TicketTypes
+        var duplicateNames = ticketTypes
             .GroupBy(x => x.Name.Trim(), StringComparer.OrdinalIgnoreCase)
             .Where(x => x.Count() > 1)
             .Select(x => x.Key)
@@ -377,7 +540,7 @@ public sealed class EventService : IEventService
             errors.Add($"Tên loại vé bị trùng: {string.Join(", ", duplicateNames)}.");
         }
 
-        foreach (var ticketType in request.TicketTypes)
+        foreach (var ticketType in ticketTypes)
         {
             var name = ticketType.Name.Trim();
             if (ticketType.SaleEndsAt <= ticketType.SaleStartsAt)
@@ -399,12 +562,36 @@ public sealed class EventService : IEventService
         return errors;
     }
 
-    private Task<bool> CategoryExistsAsync(Guid categoryId, CancellationToken cancellationToken) =>
+    private Task<bool> CategoryIsActiveAsync(Guid categoryId, CancellationToken cancellationToken) =>
         _dbContext.EventCategories.AnyAsync(
             x => x.Id == categoryId && x.IsActive,
             cancellationToken);
 
-    private static void ApplyFields(Event evt, SaveEventRequest request)
+    private Task<bool> HasActiveTicketTypeAsync(Guid eventId, CancellationToken cancellationToken) =>
+        _dbContext.TicketTypes.AnyAsync(
+            x => x.EventId == eventId && x.IsActive,
+            cancellationToken);
+
+    private static Event NewEvent(
+        Guid organizationId,
+        Guid currentUserId,
+        EventDetailsRequest request,
+        DateTimeOffset now)
+    {
+        var evt = new Event
+        {
+            OrganizationId = organizationId,
+            CategoryId = request.CategoryId,
+            CreatedByUserId = currentUserId,
+            Slug = SlugGenerator.Create(request.Title),
+            Status = EventStatus.Draft,
+            CreatedAt = now
+        };
+        ApplyFields(evt, request);
+        return evt;
+    }
+
+    private static void ApplyFields(Event evt, EventDetailsRequest request)
     {
         evt.Title = request.Title.Trim();
         evt.Description = request.Description.Trim();
@@ -414,6 +601,22 @@ public sealed class EventService : IEventService
         evt.StartsAt = request.StartsAt;
         evt.EndsAt = request.EndsAt;
     }
+
+    private void AddHistory(
+        Event evt,
+        EventStatus fromStatus,
+        Guid currentUserId,
+        string note,
+        DateTimeOffset now) =>
+        _dbContext.EventApprovalHistories.Add(new EventApprovalHistory
+        {
+            EventId = evt.Id,
+            FromStatus = fromStatus,
+            ToStatus = evt.Status,
+            ActionByUserId = currentUserId,
+            Note = note,
+            CreatedAt = now
+        });
 
     private void AddTicketTypes(Guid eventId, IEnumerable<TicketTypeRequest> ticketTypes)
     {

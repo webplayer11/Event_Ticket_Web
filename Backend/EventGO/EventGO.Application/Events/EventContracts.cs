@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using EventGO.Domain.Enums;
 
 namespace EventGO.Application.Events;
 
@@ -14,7 +15,9 @@ public enum EventError
     // Trạng thái hiện tại không cho phép thao tác (vd: sửa sự kiện đã công khai).
     InvalidStatus,
     // Dữ liệu vừa bị người khác thay đổi.
-    Conflict
+    Conflict,
+    // Đã có vé được giữ chỗ/bán: chưa có chính sách hoàn tiền nên không được hủy.
+    TicketsSold
 }
 
 public sealed record EventResult<T>(
@@ -22,6 +25,36 @@ public sealed record EventResult<T>(
     EventError Error,
     IReadOnlyList<string>? Errors = null)
     where T : class;
+
+/// <summary>
+/// Luồng trạng thái sự kiện. Mọi thao tác đổi trạng thái đều kiểm tra ở đây.
+/// <code>
+/// Draft → PendingApproval → Approved → Published → Completed
+///                      ↘ Rejected → (sửa, gửi lại) PendingApproval
+/// Draft/Approved/Published → Cancelled
+/// </code>
+/// </summary>
+public static class EventStatusTransitions
+{
+    private static readonly Dictionary<EventStatus, EventStatus[]> Allowed = new()
+    {
+        [EventStatus.Draft] = [EventStatus.PendingApproval, EventStatus.Cancelled],
+        [EventStatus.PendingApproval] = [EventStatus.Approved, EventStatus.Rejected],
+        [EventStatus.Rejected] = [EventStatus.PendingApproval],
+        [EventStatus.Approved] = [EventStatus.Published, EventStatus.Cancelled],
+        [EventStatus.Published] = [EventStatus.Completed, EventStatus.Cancelled]
+    };
+
+    public static bool CanTransition(EventStatus from, EventStatus to) =>
+        Allowed.TryGetValue(from, out var targets) && targets.Contains(to);
+
+    /// <summary>
+    /// Chỉ sửa được khi sự kiện chưa gửi duyệt hoặc bị từ chối. Sau khi duyệt
+    /// chưa có chính sách sửa (vé có thể đã bán), nên không cho sửa.
+    /// </summary>
+    public static bool IsEditable(EventStatus status) =>
+        status is EventStatus.Draft or EventStatus.Rejected;
+}
 
 public class TicketTypeRequest
 {
@@ -46,23 +79,11 @@ public class TicketTypeRequest
     public DateTimeOffset SaleEndsAt { get; set; }
 }
 
-public class SaveEventRequest
+/// <summary>
+/// Thông tin sự kiện dùng cho tạo nháp và sửa.
+/// </summary>
+public class EventDetailsRequest
 {
-    /// <summary>
-    /// Tổ chức sở hữu sự kiện. Bỏ trống: dùng tổ chức cá nhân của người tạo
-    /// (tự tạo ở lần đầu). Có giá trị: người tạo phải là Owner/Manager.
-    /// Chỉ dùng khi tạo mới; khi sửa sự kiện thì bỏ qua.
-    /// </summary>
-    public Guid? OrganizationId { get; set; }
-
-    // Tên/thông tin ban tổ chức: dùng để đặt tên tổ chức cá nhân
-    // khi hệ thống tự tạo. Bỏ qua nếu đã có tổ chức.
-    [StringLength(200)]
-    public string? OrganizerName { get; set; }
-
-    [StringLength(4000)]
-    public string? OrganizerInfo { get; set; }
-
     [Required]
     [StringLength(250, MinimumLength = 2)]
     public string Title { get; set; } = string.Empty;
@@ -89,10 +110,32 @@ public class SaveEventRequest
 
     public DateTimeOffset EndsAt { get; set; }
 
-    [Required]
-    [MinLength(1, ErrorMessage = "Sự kiện phải có ít nhất một loại vé.")]
+    /// <summary>
+    /// null: giữ nguyên loại vé hiện có (quản lý riêng qua API ticket-types).
+    /// Có giá trị: thay toàn bộ loại vé. Khi gửi duyệt phải có ít nhất một loại vé.
+    /// </summary>
     [MaxLength(20)]
-    public List<TicketTypeRequest> TicketTypes { get; set; } = new();
+    public List<TicketTypeRequest>? TicketTypes { get; set; }
+}
+
+/// <summary>
+/// Body của <c>POST /api/events</c>: tạo và gửi duyệt ngay.
+/// </summary>
+public class SaveEventRequest : EventDetailsRequest
+{
+    /// <summary>
+    /// Tổ chức sở hữu sự kiện. Bỏ trống: dùng tổ chức cá nhân của người tạo
+    /// (tự tạo ở lần đầu). Có giá trị: người tạo phải là Owner/Manager.
+    /// </summary>
+    public Guid? OrganizationId { get; set; }
+
+    // Tên/thông tin ban tổ chức: dùng để đặt tên tổ chức cá nhân
+    // khi hệ thống tự tạo. Bỏ qua nếu đã có tổ chức.
+    [StringLength(200)]
+    public string? OrganizerName { get; set; }
+
+    [StringLength(4000)]
+    public string? OrganizerInfo { get; set; }
 }
 
 public class ReviewEventRequest
@@ -100,6 +143,67 @@ public class ReviewEventRequest
     // Ghi chú khi duyệt (không bắt buộc) hoặc lý do từ chối (bắt buộc).
     [StringLength(2000)]
     public string? Note { get; set; }
+}
+
+public class CancelEventRequest
+{
+    [StringLength(2000)]
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Bộ lọc danh sách sự kiện công khai. Tên tham số query là camelCase.
+/// </summary>
+public class EventSearchQuery : IValidatableObject
+{
+    public const int DefaultPageSize = 20;
+    public const int MaxPageSize = 100;
+
+    /// <summary>Từ khóa trong tên sự kiện.</summary>
+    [StringLength(200)]
+    public string? Q { get; set; }
+
+    public Guid? CategoryId { get; set; }
+
+    [StringLength(100)]
+    public string? City { get; set; }
+
+    /// <summary>Sự kiện bắt đầu từ thời điểm này.</summary>
+    public DateTimeOffset? From { get; set; }
+
+    /// <summary>Sự kiện bắt đầu trước hoặc đúng thời điểm này.</summary>
+    public DateTimeOffset? To { get; set; }
+
+    /// <summary>Có ít nhất một loại vé đang bán giá ≥ minPrice.</summary>
+    [Range(typeof(decimal), "0", "1000000000")]
+    public decimal? MinPrice { get; set; }
+
+    /// <summary>Có ít nhất một loại vé đang bán giá ≤ maxPrice.</summary>
+    [Range(typeof(decimal), "0", "1000000000")]
+    public decimal? MaxPrice { get; set; }
+
+    [Range(1, 100_000)]
+    public int Page { get; set; } = 1;
+
+    [Range(1, MaxPageSize)]
+    public int PageSize { get; set; } = DefaultPageSize;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (From > To)
+        {
+            yield return new ValidationResult(
+                "to phải sau hoặc bằng from.",
+                [nameof(To)]);
+        }
+
+        if (MinPrice > MaxPrice)
+        {
+            yield return new ValidationResult(
+                "maxPrice phải lớn hơn hoặc bằng minPrice.",
+                [nameof(MaxPrice)]);
+        }
+    }
 }
 
 public class TicketTypeResponse
@@ -150,49 +254,93 @@ public class ManagedEventResponse : EventResponse
     public DateTimeOffset? LastReviewedAt { get; set; }
 }
 
+/// <summary>Một trang kết quả; controller trả Items và đặt tổng số vào header.</summary>
+public sealed record EventPage(List<EventResponse> Items, int TotalCount);
+
 public interface IEventService
 {
     /// <summary>
-    /// Tạo sự kiện ở trạng thái chờ duyệt và báo cho PlatformAdmin.
+    /// <c>POST /api/events</c>: tạo (tổ chức cá nhân nếu không chỉ định)
+    /// rồi gửi duyệt ngay, báo cho PlatformAdmin.
     /// </summary>
-    Task<EventResult<ManagedEventResponse>> CreateAsync(
+    Task<EventResult<ManagedEventResponse>> CreateAndSubmitAsync(
         Guid currentUserId,
         SaveEventRequest request,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Sửa sự kiện đang chờ duyệt hoặc bị từ chối. Sự kiện bị từ chối
-    /// sau khi sửa sẽ quay lại hàng chờ duyệt và Admin được báo lại.
-    /// </summary>
+    /// <summary>Tạo sự kiện nháp trong tổ chức. Chỉ Owner/Manager.</summary>
+    Task<EventResult<ManagedEventResponse>> CreateDraftAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        EventDetailsRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sửa sự kiện Draft/Rejected. Không đổi trạng thái.</summary>
     Task<EventResult<ManagedEventResponse>> UpdateAsync(
         Guid eventId,
         Guid currentUserId,
-        SaveEventRequest request,
+        EventDetailsRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Draft/Rejected → PendingApproval, báo cho PlatformAdmin.</summary>
+    Task<EventResult<ManagedEventResponse>> SubmitAsync(
+        Guid eventId,
+        Guid currentUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Approved → Published: công khai và mở bán vé.</summary>
+    Task<EventResult<ManagedEventResponse>> PublishAsync(
+        Guid eventId,
+        Guid currentUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Draft/Approved/Published → Cancelled khi chưa có vé giữ chỗ/bán.</summary>
+    Task<EventResult<ManagedEventResponse>> CancelAsync(
+        Guid eventId,
+        Guid currentUserId,
+        CancelEventRequest request,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IEventQueryService
+{
+    /// <summary>Sự kiện công khai còn diễn ra, có lọc và phân trang.</summary>
+    Task<EventPage> SearchPublishedAsync(
+        EventSearchQuery query,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Chi tiết theo slug hoặc id. Người ngoài chỉ thấy sự kiện Published;
+    /// Owner/Manager của tổ chức thấy mọi trạng thái.
+    /// </summary>
+    Task<EventResponse?> GetDetailAsync(
+        string? slug,
+        Guid? eventId,
+        Guid? currentUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sự kiện của một tổ chức. Chỉ Owner/Manager.</summary>
+    Task<EventResult<List<ManagedEventResponse>>> GetByOrganizationAsync(
+        Guid organizationId,
+        Guid currentUserId,
+        EventStatus? status,
         CancellationToken cancellationToken = default);
 
     /// <summary>Sự kiện thuộc các tổ chức mà người gọi là Owner/Manager.</summary>
     Task<List<ManagedEventResponse>> GetManagedAsync(
         Guid currentUserId,
         CancellationToken cancellationToken = default);
-
-    /// <summary>Sự kiện đã công khai (đã được duyệt).</summary>
-    Task<List<EventResponse>> GetPublishedAsync(
-        CancellationToken cancellationToken = default);
-
-    Task<EventResponse?> GetPublishedByIdAsync(
-        Guid eventId,
-        CancellationToken cancellationToken = default);
 }
 
 public interface IEventReviewService
 {
     Task<List<ManagedEventResponse>> GetForReviewAsync(
-        Domain.Enums.EventStatus status,
+        EventStatus status,
         CancellationToken cancellationToken = default);
 
     Task<int> CountPendingAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Duyệt: sự kiện được công khai và mở bán vé.</summary>
+    /// <summary>PendingApproval → Approved. Tổ chức tự xuất bản sau đó.</summary>
     Task<EventResult<ManagedEventResponse>> ApproveAsync(
         Guid eventId,
         Guid adminUserId,

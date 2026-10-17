@@ -762,6 +762,14 @@ internal sealed class TestEventGoDbContext : EventGoDbContext
                 {
                     property.SetValueConverter(new DateTimeOffsetToBinaryConverter());
                 }
+
+                // SQLite không so sánh được decimal (lọc sự kiện theo giá vé).
+                if (property.ClrType == typeof(decimal))
+                {
+                    property.SetValueConverter(new ValueConverter<decimal, double>(
+                        value => (double)value,
+                        value => (decimal)value));
+                }
             }
         }
     }

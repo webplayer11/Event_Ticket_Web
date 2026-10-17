@@ -61,7 +61,8 @@ introduced:
 
 - No response wrapper, middleware or exception filter: success returns the DTO
   itself; lists are plain JSON arrays. There is no pagination DTO in the
-  codebase, so none is used.
+  codebase, so none is used. The one paged list (`GET /api/events`) keeps the
+  plain array body and returns the total in the `X-Total-Count` header.
 - camelCase properties (`Program.cs`); enum values in responses are their
   string names; dates are ISO 8601 `DateTimeOffset`; nulls are written.
 - Business errors in admin/account/organization/event APIs:
