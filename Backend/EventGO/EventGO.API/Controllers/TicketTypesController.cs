@@ -9,7 +9,7 @@ namespace EventGO.API.Controllers;
 public sealed class TicketTypesController(ITicketTypeService service) : ControllerBase
 {
     [Authorize, HttpPost("api/events/{eventId:guid}/ticket-types")]
-    [ProducesResponseType(typeof(TicketTypeResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ManagedTicketTypeResponse), StatusCodes.Status201Created)]
     public async Task<IActionResult> Create(Guid eventId, SaveTicketTypeRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } uid) return Unauthorized();
@@ -18,7 +18,7 @@ public sealed class TicketTypesController(ITicketTypeService service) : Controll
     }
 
     [AllowAnonymous, HttpGet("api/events/{eventId:guid}/ticket-types")]
-    [ProducesResponseType(typeof(List<TicketTypeResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<ManagedTicketTypeResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(Guid eventId, CancellationToken ct)
     {
         var result = await service.GetAsync(eventId, User.GetUserId(), ct);
@@ -26,7 +26,7 @@ public sealed class TicketTypesController(ITicketTypeService service) : Controll
     }
 
     [Authorize, HttpPut("api/ticket-types/{ticketTypeId:guid}")]
-    [ProducesResponseType(typeof(TicketTypeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ManagedTicketTypeResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(Guid ticketTypeId, SaveTicketTypeRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } uid) return Unauthorized();
@@ -35,7 +35,7 @@ public sealed class TicketTypesController(ITicketTypeService service) : Controll
     }
 
     [Authorize, HttpPatch("api/ticket-types/{ticketTypeId:guid}/status")]
-    [ProducesResponseType(typeof(TicketTypeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ManagedTicketTypeResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> SetStatus(Guid ticketTypeId, UpdateTicketTypeStatusRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } uid) return Unauthorized();
