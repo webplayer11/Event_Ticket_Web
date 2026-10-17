@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using EventGO.Application.Authentication;
 using EventGO.Infrastructure;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,6 +42,12 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAuthorization(options =>
 {
+    // Mặc định mọi endpoint yêu cầu đăng nhập, kể cả controller mới
+    // quên gắn [Authorize]. Endpoint công khai phải gắn [AllowAnonymous].
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
     options.AddPolicy(
         AuthorizationPolicies.PlatformAdmin,
         policy => policy.RequireRole(SystemRoles.PlatformAdmin));
