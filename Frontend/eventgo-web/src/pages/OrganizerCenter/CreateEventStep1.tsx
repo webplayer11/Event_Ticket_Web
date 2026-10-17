@@ -90,113 +90,113 @@ export const CreateEventStep1 = () => {
 
     return (
         <div className="mx-auto max-w-4xl py-8">
-                <StepIndicator currentStep={1} onSave={processDraft} onContinue={handleSubmit(onSubmit)} />
+            <StepIndicator currentStep={1} onSave={processDraft} onContinue={handleSubmit(onSubmit)} />
 
-                <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 pb-32">
-                    {/* Upload ảnh */}
-                    <div className="flex flex-col gap-4 md:flex-row">
-                        <div className="w-full md:w-[35%]">
-                            <ImageUploadBox
-                                label="Thêm ảnh sự kiện để hiển thị ở các vị trí khác (720x958)"
-                                dimensionLabel="720x958"
-                                orientation="portrait"
-                                registration={register('coverImage')}
-                                error={errors.coverImage?.message as string}
-                                required
-                            />
-                        </div>
-                        <div className="w-full md:w-[65%]">
-                            <ImageUploadBox
-                                label="Thêm ảnh nền sự kiện (1280x720)"
-                                dimensionLabel="1280x720"
-                                orientation="landscape"
-                                registration={register('bgImage')}
-                                error={errors.bgImage?.message as string}
-                                required
-                            />
-                        </div>
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 pb-32">
+                {/* Upload ảnh */}
+                <div className="flex flex-col gap-4 md:flex-row">
+                    <div className="w-full md:w-[35%]">
+                        <ImageUploadBox
+                            label="Thêm ảnh sự kiện để hiển thị ở các vị trí khác (720x958)"
+                            dimensionLabel="720x958"
+                            orientation="portrait"
+                            registration={register('coverImage')}
+                            error={errors.coverImage?.message as string}
+                            required
+                        />
                     </div>
-
-                    {/* Tên sự kiện */}
-                    <div className="flex flex-col gap-2 rounded-lg border border-[#2d2d2d] bg-[#12181A] p-6">
-                        <label className="text-sm font-medium text-white">
-                            Tên sự kiện <span className="text-green-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <input
-                                type="text"
-                                placeholder="Tên sự kiện"
-                                className={`w-full rounded-md border text-black bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.eventName ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                {...register('eventName')}
-                            />
-                            <span className={`absolute right-3 top-2.5 text-xs ${eventName.length >= 100 ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
-                                {eventName.length} / 100
-                            </span>
-                        </div>
-                        {errors.eventName && <p className="text-xs text-red-500">{errors.eventName.message}</p>}
+                    <div className="w-full md:w-[65%]">
+                        <ImageUploadBox
+                            label="Thêm ảnh nền sự kiện (1280x720)"
+                            dimensionLabel="1280x720"
+                            orientation="landscape"
+                            registration={register('bgImage')}
+                            error={errors.bgImage?.message as string}
+                            required
+                        />
                     </div>
+                </div>
 
-                    {/* Địa điểm */}
-                    <AddressSection
-                        type={addressType}
-                        onChangeType={(type) => setValue('addressType', type)}
-                        registers={{
-                            locationName: register('locationName'),
-                            province: register('province'),
-                            ward: register('ward'),
-                            address: register('address'),
-                            onlineLink: register('onlineLink'),
-                        }}
-                        errors={errors}
-                        provinceValue={province}
-                        charCounts={{
-                            locationName: locationName.length,
-                            address: address.length,
-                        }}
-                    />
-
-                    {/* Thể loại sự kiện */}
-                    <div className="flex flex-col gap-2 rounded-lg border border-[#2d2d2d] bg-[#12181A] p-6">
-                        <label className="text-sm font-medium text-white">
-                            Thể loại sự kiện <span className="text-green-500">*</span>
-                        </label>
-                        <select
-                            className={`w-full rounded-md border text-black bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
+                {/* Tên sự kiện */}
+                <div className="flex flex-col gap-2 rounded-lg border border-[#2d2d2d] bg-[#12181A] p-6">
+                    <label className="text-sm font-medium text-white">
+                        Tên sự kiện <span className="text-green-500">*</span>
+                    </label>
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Tên sự kiện"
+                            className={`w-full rounded-md border text-black bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.eventName ? 'border-red-500' : 'border-gray-300'
                                 }`}
-                            {...register('category')}
-                        >
-                            <option value="" disabled>Vui lòng chọn</option>
-                            <option value="Âm nhạc">Âm nhạc</option>
-                            <option value="Thể thao">Thể thao</option>
-                            <option value="Hội thảo/Workshop">Hội thảo/Workshop</option>
-                            <option value="Sân khấu & Nghệ thuật">Sân khấu & Nghệ thuật</option>
-                            <option value="Khác">Khác...</option>
-                        </select>
-                        {errors.category && <p className="text-xs text-red-500">{errors.category.message}</p>}
+                            {...register('eventName')}
+                        />
+                        <span className={`absolute right-3 top-2.5 text-xs ${eventName.length >= 100 ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
+                            {eventName.length} / 100
+                        </span>
                     </div>
+                    {errors.eventName && <p className="text-xs text-red-500">{errors.eventName.message}</p>}
+                </div>
 
-                    {/* Thông tin sự kiện (RichTextEditor) */}
-                    <RichTextEditorField
-                        value={watch('description')}
-                        onChange={(val) => setValue('description', val, { shouldValidate: true })}
-                        error={errors.description?.message}
-                    />
+                {/* Địa điểm */}
+                <AddressSection
+                    type={addressType}
+                    onChangeType={(type) => setValue('addressType', type)}
+                    registers={{
+                        locationName: register('locationName'),
+                        province: register('province'),
+                        ward: register('ward'),
+                        address: register('address'),
+                        onlineLink: register('onlineLink'),
+                    }}
+                    errors={errors}
+                    provinceValue={province}
+                    charCounts={{
+                        locationName: locationName.length,
+                        address: address.length,
+                    }}
+                />
 
-                    {/* Organizer Info */}
-                    <OrganizerInfoSection
-                        registers={{
-                            logo: register('organizerLogo'),
-                            name: register('organizerName'),
-                            info: register('organizerInfo'),
-                        }}
-                        errors={errors}
-                        charCounts={{
-                            name: organizerName.length,
-                            info: organizerInfo.length,
-                        }}
-                    />
-                </form>
-            </div>
+                {/* Thể loại sự kiện */}
+                <div className="flex flex-col gap-2 rounded-lg border border-[#2d2d2d] bg-[#12181A] p-6">
+                    <label className="text-sm font-medium text-white">
+                        Thể loại sự kiện <span className="text-green-500">*</span>
+                    </label>
+                    <select
+                        className={`w-full rounded-md border text-black bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                        {...register('category')}
+                    >
+                        <option value="" disabled>Vui lòng chọn</option>
+                        <option value="Âm nhạc">Âm nhạc</option>
+                        <option value="Thể thao">Thể thao</option>
+                        <option value="Hội thảo/Workshop">Hội thảo/Workshop</option>
+                        <option value="Sân khấu & Nghệ thuật">Sân khấu & Nghệ thuật</option>
+                        <option value="Khác">Khác...</option>
+                    </select>
+                    {errors.category && <p className="text-xs text-red-500">{errors.category.message}</p>}
+                </div>
+
+                {/* Thông tin sự kiện (RichTextEditor) */}
+                <RichTextEditorField
+                    value={watch('description')}
+                    onChange={(val) => setValue('description', val, { shouldValidate: true })}
+                    error={errors.description?.message}
+                />
+
+                {/* Organizer Info */}
+                <OrganizerInfoSection
+                    registers={{
+                        logo: register('organizerLogo'),
+                        name: register('organizerName'),
+                        info: register('organizerInfo'),
+                    }}
+                    errors={errors}
+                    charCounts={{
+                        name: organizerName.length,
+                        info: organizerInfo.length,
+                    }}
+                />
+            </form>
+        </div>
     );
 };
