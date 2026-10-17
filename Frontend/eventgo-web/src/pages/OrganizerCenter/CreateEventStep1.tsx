@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { OrganizerLayout } from '../../components/organizer/OrganizerLayout';
 import { StepIndicator } from '../../components/organizer/StepIndicator';
 import { ImageUploadBox } from '../../components/organizer/forms/ImageUploadBox';
 import { AddressSection } from '../../components/organizer/forms/AddressSection';
@@ -90,8 +89,7 @@ export const CreateEventStep1 = () => {
     };
 
     return (
-        <OrganizerLayout>
-            <div className="mx-auto max-w-4xl py-8">
+        <div className="mx-auto max-w-4xl py-8">
                 <StepIndicator currentStep={1} onSave={processDraft} onContinue={handleSubmit(onSubmit)} />
 
                 <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 pb-32">
@@ -200,6 +198,5 @@ export const CreateEventStep1 = () => {
                     />
                 </form>
             </div>
-        </OrganizerLayout>
     );
 };
