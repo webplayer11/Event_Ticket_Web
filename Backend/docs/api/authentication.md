@@ -36,7 +36,8 @@ confirming that a particular email already exists.
 }
 ```
 
-Success: `200 OK` with `accessToken`, `tokenType`, `expiresAt`, and `user`.
+Success: `200 OK` with `accessToken`, `tokenType`, `expiresAt`, `user`,
+`refreshToken` and `refreshTokenExpiresAt` (the last two fields are additive).
 The JWT contains `sub`, `jti`, `iat`, email, system role claims, and a
 `security_stamp` claim. Wrong credentials, unknown users, inactive users, and
 locked users all receive the same `401 Unauthorized` response.
@@ -124,10 +125,44 @@ login.
 
 Success: `204 No Content`.
 
-The current architecture has no refresh token or per-device session store.
-Logout therefore rotates `SecurityStamp` and revokes all JWTs for the account.
-It is intentionally not described as a current-device-only logout. There is
-no in-memory blacklist.
+Logout preserves the existing account-wide behavior: it rotates
+`SecurityStamp`, invalidating all JWTs and refresh sessions for the account.
+It is not a current-device-only logout. There is no in-memory blacklist.
+
+### `POST /api/auth/refresh-token`
+
+Anonymous, rate-limited with the existing `auth` policy. Request:
+
+```json
+{ "refreshToken": "<opaque token returned by login or refresh>" }
+```
+
+Success: `200 OK`, same AuthResponse as login. Invalid, expired, revoked,
+already rotated, inactive/locked/deleted users and changed SecurityStamp all
+return generic `401` with `message`. Binding errors return `400`.
+No userId or expired access token is required or trusted.
+
+Tokens contain 64 cryptographically random bytes, Base64 encoded; only their
+SHA-256 hashes are persisted in RefreshTokens. Atomic conditional consumption
+and successor insertion run in one database transaction. Concurrent requests
+using the same token produce at most one valid successor; reused predecessors
+are rejected and do not revoke independent login sessions. There is no refresh
+grace period. Clients must serialize refresh requests.
+
+Jwt:RefreshTokenDays defaults to 7 (valid range 1–30). The expiry is absolute
+from login and is inherited by every successor. Rotation cannot extend it.
+Logout, password changes/resets and administrative security-stamp changes
+invalidate refresh sessions as well as access tokens. RevokedAt tracks rotation;
+SecurityStamp mismatch is also revocation even when RevokedAt is null.
+Refresh tokens never authenticate protected routes. JWTs retain the existing
+15-minute default lifetime, 30-second validation clock skew, HS256-only signing,
+issuer/audience/signature/lifetime checks and live account checks.
+
+Migration `AddRefreshTokenRotation` adds only RefreshTokens and its FK/indexes;
+apply it before deploying the new login/refresh service. Existing access tokens
+continue to work; existing clients can ignore the additive login fields.
+Use HTTPS and store credentials securely. Tokens and Authorization headers must
+not be logged. Token-table retention/cleanup remains an operational follow-up.
 
 ## Platform Admin endpoints
 
