@@ -91,7 +91,9 @@ builder.Services.AddCors(options =>
                 return uri.Host == "localhost" || uri.Host == "127.0.0.1";
             })
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            // Tổng số kết quả của GET /api/events (body vẫn là mảng thuần).
+            .WithExposedHeaders(EventGO.API.Controllers.EventsController.TotalCountHeader);
     });
 });
 

@@ -51,9 +51,10 @@ internal static class EventReadModel
 
         var lastReviews = (await dbContext.EventApprovalHistories
                 .AsNoTracking()
+                // Quyết định duyệt = mọi bước đi ra từ PendingApproval
+                // (Approved/Rejected; dữ liệu cũ: duyệt thẳng sang Published).
                 .Where(x => eventIds.Contains(x.EventId)
-                    && (x.ToStatus == EventStatus.Rejected
-                        || x.ToStatus == EventStatus.Published))
+                    && x.FromStatus == EventStatus.PendingApproval)
                 .ToListAsync(cancellationToken))
             .GroupBy(x => x.EventId)
             .ToDictionary(x => x.Key, x => x.MaxBy(h => h.CreatedAt)!);
