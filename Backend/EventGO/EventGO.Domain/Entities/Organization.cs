@@ -16,6 +16,10 @@ public class Organization
 
     public bool IsActive { get; set; } = true;
 
+    // Khác null: tổ chức cá nhân, hệ thống tự tạo khi người dùng
+    // tạo sự kiện lần đầu. Mỗi người dùng có tối đa một tổ chức cá nhân.
+    public Guid? PersonalOwnerUserId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
         = DateTimeOffset.UtcNow;
 }

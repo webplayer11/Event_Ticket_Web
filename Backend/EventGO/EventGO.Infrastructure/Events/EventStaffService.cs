@@ -112,7 +112,26 @@ public sealed class EventStaffService : IEventStaffService
             assignment.AssignedAt = _timeProvider.GetUtcNow();
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+            when (exception.IsUniqueViolation())
+        {
+            // Hai yêu cầu phân công cùng lúc: request kia đã tạo bản ghi.
+            // Trả về phân công đó thay vì lỗi 500.
+            _dbContext.ChangeTracker.Clear();
+            var existingId = await _dbContext.EventStaffAssignments
+                .Where(x => x.EventId == eventId
+                    && x.OrganizationMemberId == request.OrganizationMemberId)
+                .Select(x => x.Id)
+                .SingleAsync(cancellationToken);
+
+            return new(
+                await MapAsync(existingId, cancellationToken),
+                EventStaffError.None);
+        }
 
         return new(
             await MapAsync(assignment.Id, cancellationToken),
