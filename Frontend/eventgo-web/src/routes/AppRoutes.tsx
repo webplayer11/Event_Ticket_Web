@@ -47,8 +47,8 @@ export const AppRoutes = () => {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-      {/* 3. ORGANIZER ROUTES (Role: Organizer & Admin) */}
-      <Route element={<RoleProtectedRoute allowedRoles={["Organizer", "Admin"]} />}>
+      {/* 3. ORGANIZER ROUTES (Cho phép Customer, Organizer & Admin) */}
+      <Route element={<RoleProtectedRoute allowedRoles={["Customer", "Organizer", "Admin"]} />}>
         <Route path="/organizer" element={<OrganizerLayout />}>
           <Route index element={<OrganizerDashboardPage />} />
           <Route path="events" element={<EventListPage />} />
