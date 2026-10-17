@@ -51,6 +51,8 @@ public class EventGoDbContext
 
     public DbSet<CheckIn> CheckIns => Set<CheckIn>();
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
