@@ -32,13 +32,13 @@ the `Organizer` system role.
 
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| `GET` | `/api/event-categories` | anyone | 5 seeded categories |
+| `GET` | `/api/event-categories` | anyone | Active categories; management in [event-categories.md](event-categories.md) |
 | `GET` | `/api/events` | anyone | Published, not yet ended |
 | `GET` | `/api/events/{id}` | anyone | Published only; `404` otherwise |
 | `POST` | `/api/events` | signed in | Creates as `PendingApproval`, notifies admins |
 | `GET` | `/api/events/mine` | signed in | Events of orgs where caller is Owner/Manager, incl. `status` and `lastReviewNote` |
 | `PUT` | `/api/events/{id}` | Owner/Manager | Only while `PendingApproval` or `Rejected`; a `Rejected` event goes back to `PendingApproval` and admins are notified again |
-| `GET` | `/api/platform-admin/events?status=` | PlatformAdmin | Default `PendingApproval`, oldest first |
+| `GET` | `/api/platform-admin/events?status=` | PlatformAdmin | Default `PendingApproval`, oldest first; unknown status name → `400` |
 | `GET` | `/api/platform-admin/events/pending-count` | PlatformAdmin | `{ "count": n }` for a badge |
 | `POST` | `/api/platform-admin/events/{id}/approve` | PlatformAdmin | Body optional `{ "note": "..." }` → `Published` |
 | `POST` | `/api/platform-admin/events/{id}/reject` | PlatformAdmin | Body `{ "note": "reason" }` (required) → `Rejected` |
@@ -89,6 +89,10 @@ sales).
 | Concurrent review/edit (row version) | `409`, reload and retry |
 | Not a member of the event's organization | `404` |
 | Member but `Staff` | `403` |
+| Category missing or deactivated | `400` |
+
+Error bodies follow [event-categories.md#response-conventions-used-here](event-categories.md#response-conventions-used-here):
+`{ "message", "errors"? }`, or `ValidationProblemDetails` for DataAnnotations.
 
 ## Admin notification
 
