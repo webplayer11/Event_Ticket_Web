@@ -12,10 +12,24 @@ namespace EventGO.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IRefreshTokenService _refreshTokens;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IRefreshTokenService refreshTokens)
     {
         _authService = authService;
+        _refreshTokens = refreshTokens;
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("refresh-token")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Refresh(RefreshTokenRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _refreshTokens.RefreshAsync(request.RefreshToken, cancellationToken);
+        return response is null
+            ? Unauthorized(new { message = "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại." })
+            : Ok(response);
     }
 
     [AllowAnonymous]
