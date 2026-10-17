@@ -89,6 +89,8 @@ public static class DependencyInjection
             .Validate(
                 options => options.AccessTokenMinutes is > 0 and <= 60,
                 "Jwt:AccessTokenMinutes phải từ 1 đến 60.")
+            .Validate(options => options.RefreshTokenDays is > 0 and <= 30,
+                "Jwt:RefreshTokenDays phải từ 1 đến 30.")
             .ValidateOnStart();
 
         services
@@ -168,6 +170,9 @@ public static class DependencyInjection
             });
 
         services.AddScoped<JwtTokenService>();
+        services.AddScoped<RefreshTokenService>();
+        services.AddScoped<IRefreshTokenService>(provider => provider.GetRequiredService<RefreshTokenService>());
+        services.AddScoped<EventGO.Application.TicketTypes.ITicketTypeService, EventGO.Infrastructure.TicketTypes.TicketTypeService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<
             IAccountAdministrationService,

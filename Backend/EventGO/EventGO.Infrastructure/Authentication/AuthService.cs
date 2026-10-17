@@ -16,25 +16,25 @@ public sealed class AuthService : IAuthService
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly JwtTokenService _jwtTokenService;
     private readonly EventGoDbContext _dbContext;
     private readonly IPasswordResetEmailSender _passwordResetEmailSender;
     private readonly ILogger<AuthService> _logger;
+    private readonly RefreshTokenService _refreshTokens;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        JwtTokenService jwtTokenService,
         EventGoDbContext dbContext,
         IPasswordResetEmailSender passwordResetEmailSender,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        RefreshTokenService refreshTokens)
     {
         _userManager = userManager;
         _signInManager = signInManager;
-        _jwtTokenService = jwtTokenService;
         _dbContext = dbContext;
         _passwordResetEmailSender = passwordResetEmailSender;
         _logger = logger;
+        _refreshTokens = refreshTokens;
     }
 
     public async Task<AuthOperationResult> RegisterAsync(
@@ -133,7 +133,7 @@ public sealed class AuthService : IAuthService
             return null;
         }
 
-        return await _jwtTokenService.CreateTokenAsync(user);
+        return await _refreshTokens.CreateSessionAsync(user, cancellationToken);
     }
 
     public async Task<UserResponse?> GetCurrentUserAsync(

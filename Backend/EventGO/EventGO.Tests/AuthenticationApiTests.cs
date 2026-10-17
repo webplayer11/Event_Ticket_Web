@@ -475,7 +475,7 @@ public sealed class AuthenticationApiTests : IAsyncLifetime
         $"{prefix}-{Guid.NewGuid():N}@example.com";
 }
 
-internal sealed class AuthApiFactory : WebApplicationFactory<Program>
+internal sealed class AuthApiFactory(string? sqlServerConnection = null) : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _connection =
         new("Data Source=:memory:");
@@ -507,12 +507,16 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<EventGoDbContext>();
             services.AddSingleton(_connection);
             services.AddDbContext<EventGoDbContext>(
-                options => options.UseSqlite(_connection));
+                options =>
+                {
+                    if (sqlServerConnection is null) options.UseSqlite(_connection);
+                    else options.UseSqlServer(sqlServerConnection);
+                });
             services.RemoveAll<EventGoDbContext>();
             services.AddScoped<EventGoDbContext>(provider =>
-                new TestEventGoDbContext(
-                    provider.GetRequiredService<
-                        DbContextOptions<EventGoDbContext>>()));
+                sqlServerConnection is null
+                    ? new TestEventGoDbContext(provider.GetRequiredService<DbContextOptions<EventGoDbContext>>())
+                    : new EventGoDbContext(provider.GetRequiredService<DbContextOptions<EventGoDbContext>>()));
 
             services.RemoveAll<IPasswordResetEmailSender>();
             services.AddSingleton<IPasswordResetEmailSender>(EmailSender);
@@ -521,11 +525,12 @@ internal sealed class AuthApiFactory : WebApplicationFactory<Program>
 
     public async Task InitializeDatabaseAsync()
     {
-        await _connection.OpenAsync();
+        if (sqlServerConnection is null) await _connection.OpenAsync();
         await using var scope = Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider
             .GetRequiredService<EventGoDbContext>();
-        await dbContext.Database.EnsureCreatedAsync();
+        if (sqlServerConnection is null) await dbContext.Database.EnsureCreatedAsync();
+        else await dbContext.Database.MigrateAsync();
 
         var roleManager = scope.ServiceProvider
             .GetRequiredService<RoleManager<IdentityRole<Guid>>>();
