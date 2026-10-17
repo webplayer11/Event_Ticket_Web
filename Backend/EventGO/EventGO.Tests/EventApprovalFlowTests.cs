@@ -167,18 +167,31 @@ public sealed class EventApprovalFlowTests : IAsyncLifetime
             EventRequest("Hội thảo AI (đã sửa)", venueName: "Nhà văn hóa Thanh Niên"));
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         var updatedBody = await ReadJsonAsync(updated);
-        Assert.Equal("PendingApproval", updatedBody.GetProperty("status").GetString());
+        // Sửa không tự gửi lại: phải gọi submit.
+        Assert.Equal("Rejected", updatedBody.GetProperty("status").GetString());
         Assert.Equal("Nhà văn hóa Thanh Niên", updatedBody.GetProperty("venueName").GetString());
+
+        var resubmitted = await SendAsync(HttpMethod.Post, $"/api/events/{eventId}/submit", customerToken);
+        Assert.Equal(HttpStatusCode.OK, resubmitted.StatusCode);
+        Assert.Equal("PendingApproval", (await ReadJsonAsync(resubmitted)).GetProperty("status").GetString());
         Assert.True(_notifier.Notifications.Last().IsResubmission);
 
-        // Duyệt → công khai, không lộ thông tin người tạo.
+        // Duyệt (route alias cũ) → Approved, chưa công khai.
         var approved = await SendAsync(
             HttpMethod.Post,
             $"/api/platform-admin/events/{eventId}/approve",
             adminToken,
             new { });
         Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
-        Assert.Equal("Published", (await ReadJsonAsync(approved)).GetProperty("status").GetString());
+        Assert.Equal("Approved", (await ReadJsonAsync(approved)).GetProperty("status").GetString());
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await _client.GetAsync($"/api/events/{eventId}")).StatusCode);
+
+        // Người tạo xuất bản → công khai, không lộ thông tin người tạo.
+        var published = await SendAsync(HttpMethod.Post, $"/api/events/{eventId}/publish", customerToken);
+        Assert.Equal(HttpStatusCode.OK, published.StatusCode);
+        Assert.Equal("Published", (await ReadJsonAsync(published)).GetProperty("status").GetString());
 
         var publicEvent = await _client.GetAsync($"/api/events/{eventId}");
         Assert.Equal(HttpStatusCode.OK, publicEvent.StatusCode);
@@ -192,7 +205,7 @@ public sealed class EventApprovalFlowTests : IAsyncLifetime
             HttpStatusCode.Conflict,
             (await SendAsync(HttpMethod.Put, $"/api/events/{eventId}", customerToken, EventRequest("Đổi tên"))).StatusCode);
 
-        // Lịch sử duyệt đầy đủ: gửi → từ chối → gửi lại → duyệt.
+        // Lịch sử đầy đủ: gửi → từ chối → gửi lại → duyệt → xuất bản.
         await using var scope = _factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EventGoDbContext>();
         var history = (await dbContext.EventApprovalHistories
@@ -202,7 +215,7 @@ public sealed class EventApprovalFlowTests : IAsyncLifetime
             .Select(x => x.ToStatus)
             .ToList();
         Assert.Equal(
-            [EventStatus.PendingApproval, EventStatus.Rejected, EventStatus.PendingApproval, EventStatus.Published],
+            [EventStatus.PendingApproval, EventStatus.Rejected, EventStatus.PendingApproval, EventStatus.Approved, EventStatus.Published],
             history);
     }
 

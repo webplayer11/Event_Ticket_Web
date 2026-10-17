@@ -485,19 +485,18 @@ internal sealed class AuthApiFactory(string? sqlServerConnection = null) : WebAp
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.ConfigureAppConfiguration((_, configuration) =>
-        {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] =
-                    "Server=(localdb)\\mssqllocaldb;Database=EventGO_Tests;Trusted_Connection=True",
-                ["Jwt:Issuer"] = "EventGO.Tests",
-                ["Jwt:Audience"] = "EventGO.Tests",
-                ["Jwt:AccessTokenMinutes"] = "15",
-                ["Jwt:SecretKey"] = Convert.ToBase64String(
-                    Enumerable.Range(1, 32).Select(value => (byte)value).ToArray())
-            });
-        });
+        // UseSetting (không dùng ConfigureAppConfiguration): Program.cs đọc
+        // các giá trị này ngay khi đăng ký service, trước khi cấu hình test
+        // được nạp. Repo không còn appsettings.json nên phải cấp đủ ở đây.
+        builder.UseSetting(
+            "ConnectionStrings:DefaultConnection",
+            "Server=(localdb)\\mssqllocaldb;Database=EventGO_Tests;Trusted_Connection=True");
+        builder.UseSetting("Jwt:Issuer", "EventGO.Tests");
+        builder.UseSetting("Jwt:Audience", "EventGO.Tests");
+        builder.UseSetting("Jwt:AccessTokenMinutes", "15");
+        builder.UseSetting(
+            "Jwt:SecretKey",
+            Convert.ToBase64String(Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()));
 
         builder.ConfigureServices(services =>
         {
