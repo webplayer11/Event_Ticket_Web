@@ -1,7 +1,11 @@
+using EventGO.Application.Orders;
+using EventGO.Application.Payments;
 using EventGO.Application.Reservations;
 using EventGO.Domain.Entities;
 using EventGO.Domain.Enums;
 using EventGO.Infrastructure.Identity;
+using EventGO.Infrastructure.Orders;
+using EventGO.Infrastructure.Payments;
 using EventGO.Infrastructure.Persistence;
 using EventGO.Infrastructure.Reservations;
 using Microsoft.Data.SqlClient;
@@ -31,6 +35,74 @@ public sealed class SqlServerReservationProcedureTests
         await VerifyConcurrentReserveAsync(database);
         await VerifyMultipleItemRollbackAsync(database);
         await VerifyTransitionsAsync(database);
+    }
+
+    [Fact]
+    public async Task Payment_completion_issues_tickets_that_fit_the_real_schema()
+    {
+        var serverConnection = Environment.GetEnvironmentVariable(
+            "EVENTGO_TEST_SQLSERVER");
+        if (string.IsNullOrWhiteSpace(serverConnection))
+        {
+            Assert.Skip(
+                "Set EVENTGO_TEST_SQLSERVER to an isolated SQL Server instance.");
+        }
+
+        // SQLite không kiểm tra độ dài varchar, nên mã vé quá dài cho cột
+        // Tickets.TicketCode chỉ lộ ra trên SQL Server.
+        await using var database =
+            await SqlServerProcedureTestDatabase.CreateAsync(serverConnection);
+        var inventoryId = await database.AddInventoryAsync("Payment zone", 5);
+        await using var context = database.CreateContext();
+        var operations = new SqlServerReservationDatabaseOperations(context);
+        var clock = new TestTimeProvider(database.Now);
+
+        var reservation = await database.CreateReservationService(context)
+            .CreateAsync(database.UserId, "payment-issuance", new CreateReservationRequest
+            {
+                EventId = database.EventId,
+                Items = [new CreateReservationItemRequest
+                {
+                    TicketTypeId = inventoryId,
+                    Quantity = 3
+                }]
+            });
+        Assert.Equal(ReservationError.None, reservation.Error);
+
+        var order = await new OrderService(context, operations, clock).CreateAsync(
+            database.UserId,
+            new CreateOrderRequest
+            {
+                ReservationId = reservation.Reservation!.Id,
+                CustomerName = "Customer",
+                CustomerEmail = "customer@example.com",
+                CustomerPhone = "+84000000000"
+            });
+        Assert.Equal(OrderError.None, order.Error);
+
+        var payment = new Payment
+        {
+            OrderId = order.Order!.Id,
+            Provider = "verified-test-provider",
+            PaymentReference = Guid.NewGuid().ToString("N"),
+            Amount = order.Order.TotalAmount,
+            Currency = order.Order.Currency,
+            Status = PaymentStatus.Pending
+        };
+        context.Payments.Add(payment);
+        await context.SaveChangesAsync();
+
+        var completion = new PaymentCompletionService(
+            context, operations, clock, TestTicketQr.Tokens);
+        var first = await completion.CompleteVerifiedPaymentAsync(payment.Id, "sql-provider-tx");
+        var second = await completion.CompleteVerifiedPaymentAsync(payment.Id, "sql-provider-tx");
+
+        Assert.Equal(PaymentCompletionError.None, first.Error);
+        Assert.True(second.AlreadyCompleted);
+        await using var verifyContext = database.CreateContext();
+        var tickets = await verifyContext.Tickets.AsNoTracking().ToListAsync();
+        Assert.Equal(3, tickets.Count);
+        ReservationFlowTests.AssertIssuedTicketsAreWellFormed(tickets);
     }
 
     [Fact]

@@ -497,6 +497,7 @@ internal sealed class AuthApiFactory(string? sqlServerConnection = null) : WebAp
         builder.UseSetting(
             "Jwt:SecretKey",
             Convert.ToBase64String(Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()));
+        builder.UseSetting("TicketQr:SigningKey", TestTicketQr.SigningKey);
 
         builder.ConfigureServices(services =>
         {
