@@ -8,6 +8,7 @@ using EventGO.Infrastructure.Payments;
 using EventGO.Infrastructure.Persistence;
 using EventGO.Infrastructure.Reservations;
 using EventGO.Infrastructure.Identity;
+using EventGO.Infrastructure.Tickets;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -150,6 +151,26 @@ public sealed class ReservationFlowTests
         Assert.Equal(ReservationStatus.Converted,
             await context.Reservations.Select(x => x.Status).SingleAsync());
         Assert.Equal(2, await context.Tickets.CountAsync());
+        AssertIssuedTicketsAreWellFormed(await context.Tickets.AsNoTracking().ToListAsync());
+    }
+
+    internal static void AssertIssuedTicketsAreWellFormed(IReadOnlyCollection<Ticket> tickets)
+    {
+        Assert.NotEmpty(tickets);
+        Assert.All(tickets, ticket =>
+        {
+            Assert.Matches(
+                "^TKT-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$",
+                ticket.TicketCode);
+            // Check-in tra theo đúng hash này (TicketService.FindTicketForEventAsync).
+            Assert.Equal(
+                TicketQrTokens.Hash(TestTicketQr.Tokens.CreateToken(ticket.Id)),
+                ticket.QrTokenHash);
+            // Biết mã vé in trên giấy không được phép dựng lại QR.
+            Assert.NotEqual(TicketQrTokens.Hash(ticket.TicketCode), ticket.QrTokenHash);
+        });
+        Assert.Equal(tickets.Count, tickets.Select(x => x.TicketCode).Distinct().Count());
+        Assert.Equal(tickets.Count, tickets.Select(x => x.QrTokenHash).Distinct().Count());
     }
 
     [Fact]
@@ -542,7 +563,7 @@ internal sealed class TestDatabase : IAsyncDisposable
         new(context, new TestReservationDatabaseOperations(context), Clock);
 
     public PaymentCompletionService CreatePaymentCompletionService(EventGoDbContext context) =>
-        new(context, new TestReservationDatabaseOperations(context), Clock);
+        new(context, new TestReservationDatabaseOperations(context), Clock, TestTicketQr.Tokens);
 
     public ValueTask DisposeAsync()
     {
@@ -773,6 +794,15 @@ internal sealed class TestEventGoDbContext : EventGoDbContext
             }
         }
     }
+}
+
+internal static class TestTicketQr
+{
+    public static string SigningKey { get; } =
+        Convert.ToBase64String(Enumerable.Range(101, 32).Select(value => (byte)value).ToArray());
+
+    public static TicketQrTokens Tokens { get; } =
+        new(Options.Create(new TicketQrOptions { SigningKey = SigningKey }));
 }
 
 internal sealed class TestTimeProvider : TimeProvider

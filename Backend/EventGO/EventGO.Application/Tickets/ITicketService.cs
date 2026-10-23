@@ -4,13 +4,8 @@ namespace EventGO.Application.Tickets;
 
 public interface ITicketService
 {
-    /// <summary>
-    /// Phát hành vé cho một đơn hàng đã thanh toán.
-    /// Idempotent: gọi lại không tạo vé trùng.
-    /// </summary>
-    Task<List<TicketResponse>> IssueTicketsForOrderAsync(
-        Guid orderId,
-        CancellationToken cancellationToken = default);
+    // Vé được phát hành trong PaymentCompletionService, cùng transaction
+    // chuyển reservation sang Converted, nên không có API phát hành riêng.
 
     /// <summary>
     /// Lấy danh sách vé thuộc về user hiện tại.

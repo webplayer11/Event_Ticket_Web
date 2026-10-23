@@ -1,10 +1,9 @@
-using System.Security.Cryptography;
-using System.Text;
 using EventGO.Application.Payments;
 using EventGO.Application.Reservations;
 using EventGO.Domain.Entities;
 using EventGO.Domain.Enums;
 using EventGO.Infrastructure.Persistence;
+using EventGO.Infrastructure.Tickets;
 using Microsoft.EntityFrameworkCore;
 
 namespace EventGO.Infrastructure.Payments;
@@ -14,15 +13,18 @@ public sealed class PaymentCompletionService : IPaymentCompletionService
     private readonly EventGoDbContext _dbContext;
     private readonly IReservationDatabaseOperations _databaseOperations;
     private readonly TimeProvider _timeProvider;
+    private readonly TicketQrTokens _qrTokens;
 
     public PaymentCompletionService(
         EventGoDbContext dbContext,
         IReservationDatabaseOperations databaseOperations,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        TicketQrTokens qrTokens)
     {
         _dbContext = dbContext;
         _databaseOperations = databaseOperations;
         _timeProvider = timeProvider;
+        _qrTokens = qrTokens;
     }
 
     public async Task<PaymentCompletionResult> CompleteVerifiedPaymentAsync(
@@ -118,16 +120,16 @@ public sealed class PaymentCompletionService : IPaymentCompletionService
         {
             for (var index = 0; index < orderItem.Quantity; index++)
             {
-                var ticketCode = $"TKT-{Guid.NewGuid():N}";
-                _dbContext.Tickets.Add(new Ticket
+                var ticket = new Ticket
                 {
                     OrderItemId = orderItem.Id,
-                    TicketCode = ticketCode,
-                    QrTokenHash = Convert.ToHexString(
-                        SHA256.HashData(Encoding.UTF8.GetBytes(ticketCode))),
+                    TicketCode = TicketCodes.Generate(),
                     Status = TicketStatus.Valid,
                     IssuedAt = now
-                });
+                };
+                ticket.QrTokenHash = TicketQrTokens.Hash(
+                    _qrTokens.CreateToken(ticket.Id));
+                _dbContext.Tickets.Add(ticket);
             }
         }
 

@@ -193,6 +193,14 @@ public static class DependencyInjection
         services.AddScoped<IEventApprovalNotifier, SmtpEventApprovalNotifier>();
         services.AddOptions<EventApprovalOptions>()
             .Bind(configuration.GetSection(EventApprovalOptions.SectionName));
+        services
+            .AddOptions<TicketQrOptions>()
+            .Bind(configuration.GetSection(TicketQrOptions.SectionName))
+            .Validate(
+                options => options.HasValidSigningKey(),
+                "TicketQr:SigningKey phải là Base64 của ít nhất 32 byte.")
+            .ValidateOnStart();
+        services.AddSingleton<TicketQrTokens>();
         services.AddScoped<ITicketService, TicketService>();
         services.AddScoped<IReservationService, ReservationService>();
         services.AddScoped<IReservationExpirationService, ReservationService>();

@@ -60,26 +60,31 @@ namespace EventGO.Infrastructure.Persistence.Migrations
             migrationBuilder.DeleteData(
                 table: "EventCategories",
                 keyColumn: "Id",
+                keyColumnType: "uniqueidentifier",
                 keyValue: new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b01"));
 
             migrationBuilder.DeleteData(
                 table: "EventCategories",
                 keyColumn: "Id",
+                keyColumnType: "uniqueidentifier",
                 keyValue: new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b02"));
 
             migrationBuilder.DeleteData(
                 table: "EventCategories",
                 keyColumn: "Id",
+                keyColumnType: "uniqueidentifier",
                 keyValue: new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b03"));
 
             migrationBuilder.DeleteData(
                 table: "EventCategories",
                 keyColumn: "Id",
+                keyColumnType: "uniqueidentifier",
                 keyValue: new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b04"));
 
             migrationBuilder.DeleteData(
                 table: "EventCategories",
                 keyColumn: "Id",
+                keyColumnType: "uniqueidentifier",
                 keyValue: new Guid("0d6f2a1e-6c1b-4b1e-9a51-1f0a8d6e3b05"));
 
             migrationBuilder.DropColumn(
