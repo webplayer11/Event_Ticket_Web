@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { Ticket, User, Sparkles, Shield, Briefcase, Search, X, ChevronDown } from "lucide-react";
+import { Ticket, User, Sparkles, Shield, Briefcase, Search, X, ChevronDown, LogOut } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
 
 const navCategories = [
@@ -121,15 +121,78 @@ export const CustomerLayout = () => {
             </Link>
 
             {user ? (
-              <Link
-                to="/account"
-                className="flex items-center gap-2 p-1.5 px-3 rounded-lg border border-slate-700/60 hover:bg-slate-800 text-slate-200 text-sm transition-colors"
-              >
-                <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs">
-                  <User className="w-3.5 h-3.5" />
+              <div className="relative group">
+                <Link
+                  to="/account"
+                  className="flex items-center gap-2 p-1.5 px-3 rounded-lg border border-slate-700/60 hover:bg-slate-800 text-slate-200 text-sm transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs font-bold">
+                    {user.fullName ? user.fullName.charAt(0).toUpperCase() : <User className="w-3.5 h-3.5" />}
+                  </div>
+                  <span className="hidden sm:inline font-medium max-w-[120px] truncate">{user.fullName}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-transform duration-200 group-hover:rotate-180" />
+                </Link>
+
+                {/* User Dropdown Menu */}
+                <div className="absolute right-0 top-full pt-2 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-1.5 shadow-2xl shadow-black/60 text-sm space-y-0.5 backdrop-blur-md">
+                    <div className="px-3 py-2 border-b border-slate-800/80 mb-1">
+                      <p className="font-semibold text-white truncate">{user.fullName}</p>
+                      <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                      <span className="inline-block mt-1 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {user.role}
+                      </span>
+                    </div>
+
+                    <Link
+                      to="/account"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                    >
+                      <User className="w-4 h-4 text-emerald-400" />
+                      <span>Thông tin tài khoản</span>
+                    </Link>
+
+                    <Link
+                      to="/my-tickets"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                    >
+                      <Ticket className="w-4 h-4 text-emerald-400" />
+                      <span>Vé của tôi</span>
+                    </Link>
+
+                    <Link
+                      to="/organizer"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                    >
+                      <Briefcase className="w-4 h-4 text-emerald-400" />
+                      <span>Kênh ban tổ chức</span>
+                    </Link>
+
+                    {user.role === "Admin" && (
+                      <Link
+                        to="/admin"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-300 hover:text-red-200 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Shield className="w-4 h-4 text-red-400" />
+                        <span>Cổng quản trị Admin</span>
+                      </Link>
+                    )}
+
+                    <div className="border-t border-slate-800/80 my-1"></div>
+
+                    <button
+                      onClick={() => {
+                        useAuthStore.getState().logout();
+                        navigate("/");
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-left font-medium"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Đăng xuất</span>
+                    </button>
+                  </div>
                 </div>
-                <span className="hidden sm:inline">{user.fullName}</span>
-              </Link>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <Link

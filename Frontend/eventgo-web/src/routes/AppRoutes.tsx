@@ -37,10 +37,8 @@ export const AppRoutes = () => {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/my-tickets" element={<MyTicketsPage />} />
+        <Route path="/account" element={<AccountPage />} />
       </Route>
-
-      {/* Account Route */}
-      <Route path="/account" element={<AccountPage />} />
 
       {/* 2. AUTHENTICATION ROUTES */}
       <Route path="/login" element={<LoginPage />} />
