@@ -12,6 +12,7 @@
   --coral: #ff6042;
   --paper: #f3f2ed;
   --muted: oklch(0.97 0 0);
+  --muted-text: #52525b;
   --line: #deddd7;
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -805,23 +806,26 @@ input:focus-visible {
 
 .event-card {
   min-width: 0;
-  border: 1px solid rgba(12, 13, 13, .055);
+  border: 1px solid rgba(12, 13, 13, .08);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: #fff;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  cursor: pointer;
   transition: transform .25s, box-shadow .25s;
 }
 
 .event-card:hover {
   transform: translateY(-6px);
-  box-shadow: 0 18px 35px rgba(20, 21, 20, .10);
+  box-shadow: 0 18px 35px rgba(20, 21, 20, .12);
 }
 
 .event-image {
   aspect-ratio: 1/.78;
   position: relative;
   overflow: hidden;
-  background: #222;
+  background: #1e293b;
 }
 
 .event-image img {
@@ -838,14 +842,15 @@ input:focus-visible {
   position: absolute;
   left: 12px;
   top: 12px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border-radius: 999px;
-  color: white;
-  background: rgba(12, 13, 13, .85);
+  color: #ffffff;
+  background: rgba(15, 23, 42, .88);
+  backdrop-filter: blur(4px);
   text-transform: uppercase;
-  font-size: 9px;
-  letter-spacing: .12em;
-  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: .08em;
+  font-weight: 700;
 }
 
 .event-image button {
@@ -858,8 +863,10 @@ input:focus-visible {
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .9);
+  background: rgba(255, 255, 255, .92);
+  color: #0f172a;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .event-image button .icon {
@@ -877,50 +884,60 @@ input:focus-visible {
 
 .event-copy {
   padding: 20px;
+  background: #ffffff;
 }
 
 .event-copy .date {
-  margin: 0 0 10px;
-  color: var(--coral);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .05em;
+  margin: 0 0 8px;
+  color: #ea580c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
 }
 
 .event-copy h3 {
   min-height: 52px;
-  margin: 0 0 12px;
-  font-size: 18px;
+  margin: 0 0 10px;
+  font-size: 17px;
   line-height: 1.42;
   letter-spacing: -.02em;
+  color: #0f172a;
+  font-weight: 800;
 }
 
 .event-copy .place {
   min-height: 38px;
   margin: 0;
   display: flex;
+  align-items: flex-start;
   gap: 7px;
-  color: var(--muted);
-  font-size: 12px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.45;
 }
 
 .event-copy .place .icon {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
+  color: #64748b;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .event-copy>div {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #ecece7;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .event-copy strong {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .event-copy a,
@@ -962,7 +979,7 @@ input:focus-visible {
 
 .empty-state p {
   margin: 0;
-  color: var(--muted);
+  color: #64748b;
 }
 
 .spotlight-section {
@@ -1151,7 +1168,7 @@ input:focus-visible {
 .section-note {
   max-width: 380px;
   margin: 0;
-  color: var(--muted);
+  color: var(--muted-text);
   line-height: 1.65;
 }
 
@@ -1231,7 +1248,7 @@ input:focus-visible {
 }
 
 .editorial-card>span {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1268,7 +1285,7 @@ input:focus-visible {
   padding: 0 18px;
   border: 0;
   border-radius: 999px;
-  color: var(--muted);
+  color: var(--muted-text);
   background: transparent;
   font-size: 11px;
   font-weight: 800;
@@ -1337,7 +1354,7 @@ input:focus-visible {
 }
 
 .fresh-grid time {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 10px;
 }
 
@@ -1525,7 +1542,7 @@ input:focus-visible {
 .newsletter form small {
   display: block;
   margin-top: 12px;
-  color: var(--muted);
+  color: var(--muted-text);
   line-height: 1.5;
 }
 
@@ -1628,7 +1645,8 @@ input:focus-visible {
   display: grid;
   grid-template-columns: 1.05fr .95fr;
   border-radius: var(--radius-xl);
-  background: #fff;
+  background: #ffffff;
+  color: #0f172a;
   box-shadow: 0 25px 80px rgba(0, 0, 0, .35);
 }
 
@@ -1639,10 +1657,17 @@ input:focus-visible {
 }
 
 .event-modal>div {
-  padding: 58px 48px;
+  padding: 48px 40px;
 }
 
-.event-modal h2,
+.event-modal h2 {
+  margin: 10px 0 16px;
+  font-size: clamp(24px, 3.2vw, 36px);
+  line-height: 1.25;
+  letter-spacing: -.03em;
+  color: #0f172a;
+}
+
 .login-modal h2 {
   margin: 10px 0 22px;
   font-size: clamp(36px, 4vw, 54px);
@@ -1658,9 +1683,19 @@ input:focus-visible {
 
 .modal-place {
   display: flex;
+  align-items: center;
   gap: 8px;
-  color: var(--muted);
+  color: #475569;
   line-height: 1.5;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.modal-place .icon {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 .modal-buy {
@@ -1708,7 +1743,7 @@ input:focus-visible {
 }
 
 .login-modal>p:not(.kicker) {
-  color: var(--muted);
+  color: var(--muted-text);
   line-height: 1.6;
 }
 
@@ -2358,7 +2393,7 @@ input:focus-visible {
 
 .register-form-header p {
   margin: 0;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 14px;
 }
 
@@ -2473,7 +2508,7 @@ input:focus-visible {
   align-items: flex-start;
   gap: 10px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-text);
   font-weight: normal;
   text-transform: none;
   cursor: pointer;
@@ -2534,7 +2569,7 @@ input:focus-visible {
   border-top: 1px solid var(--line);
   text-align: center;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 .text-link-bold {
@@ -2582,7 +2617,7 @@ input:focus-visible {
 }
 
 .register-success-view p {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 15px;
   line-height: 1.6;
   margin: 0 0 32px;
@@ -2653,7 +2688,7 @@ input:focus-visible {
   display: flex;
   align-items: center;
   margin: 20px 0;
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;

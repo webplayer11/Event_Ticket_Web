@@ -476,7 +476,19 @@ export const HomePage = () => {
             </div>
             <div className="event-grid">
               {visibleEvents.slice(0, 4).map((event) => (
-                <article className="event-card" key={event.id}>
+                <article
+                  className="event-card cursor-pointer"
+                  key={event.id}
+                  onClick={() => setSelectedEvent(event)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedEvent(event);
+                    }
+                  }}
+                >
                   <div className="event-image">
                     <RenderEventImage
                       title={event.title}
@@ -484,7 +496,10 @@ export const HomePage = () => {
                     />
                     <span className="event-tag">{event.categoryName}</span>
                     <button
-                      onClick={() => toggleLike(event.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(event.id);
+                      }}
                       className={likedIds.includes(event.id) ? "liked" : ""}
                       aria-label="Lưu sự kiện"
                     >
@@ -502,7 +517,10 @@ export const HomePage = () => {
                       <strong>{formatPrice(event.ticketTypes)}</strong>
                       <button
                         className="card-arrow"
-                        onClick={() => setSelectedEvent(event)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEvent(event);
+                        }}
                         aria-label={`Xem ${event.title}`}
                       >
                         <Icon name="arrow" />
@@ -559,7 +577,19 @@ export const HomePage = () => {
 
                   <div className="event-grid">
                     {cat.events.map((event) => (
-                      <article className="event-card" key={event.id}>
+                      <article
+                        className="event-card cursor-pointer"
+                        key={event.id}
+                        onClick={() => setSelectedEvent(event)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedEvent(event);
+                          }
+                        }}
+                      >
                         <div className="event-image">
                           <RenderEventImage
                             title={event.title}
@@ -567,7 +597,10 @@ export const HomePage = () => {
                           />
                           <span className="event-tag">{event.categoryName}</span>
                           <button
-                            onClick={() => toggleLike(event.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLike(event.id);
+                            }}
                             className={likedIds.includes(event.id) ? "liked" : ""}
                             aria-label="Lưu sự kiện"
                           >
@@ -585,7 +618,10 @@ export const HomePage = () => {
                             <strong>{formatPrice(event.ticketTypes)}</strong>
                             <button
                               className="card-arrow"
-                              onClick={() => setSelectedEvent(event)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedEvent(event);
+                              }}
                               aria-label={`Xem ${event.title}`}
                             >
                               <Icon name="arrow" />
@@ -637,6 +673,23 @@ export const HomePage = () => {
                 <Icon name="pin" />
                 {selectedEvent.venueName}, {selectedEvent.city}
               </p>
+              {selectedEvent.description && (
+                <p
+                  className="modal-desc"
+                  style={{
+                    marginTop: "14px",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    color: "#475569",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {selectedEvent.description}
+                </p>
+              )}
               <div className="modal-buy">
                 <strong>{formatPrice(selectedEvent.ticketTypes)}</strong>
                 <button
