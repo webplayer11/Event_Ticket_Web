@@ -31,6 +31,13 @@ export function createEvent(
   });
 }
 
+/** Công khai / xuất bản sự kiện đã được duyệt */
+export function publishEvent(id: string): Promise<ManagedEventResponse> {
+  return api<ManagedEventResponse>(`/events/${id}/publish`, {
+    method: "POST",
+  });
+}
+
 /** Cập nhật sự kiện */
 export function updateEvent(
   id: string,

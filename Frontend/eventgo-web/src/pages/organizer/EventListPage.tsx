@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Edit, QrCode, Loader2, AlertCircle } from "lucide-react";
-import { getMyEvents } from "../../services/eventService";
+import { Plus, Edit, QrCode, Loader2, AlertCircle, Globe, CheckCircle2, X } from "lucide-react";
+import { getMyEvents, publishEvent } from "../../services/eventService";
 import type { ManagedEventResponse } from "../../types";
 
 function formatEventDate(startsAt: string): string {
@@ -18,9 +18,11 @@ function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
     Draft: "Bản nháp",
     PendingApproval: "Chờ duyệt",
+    Approved: "Đã duyệt",
     Published: "Đang mở bán",
     Rejected: "Bị từ chối",
     Cancelled: "Đã hủy",
+    Completed: "Đã kết thúc",
   };
   return map[status] ?? status;
 }
@@ -28,6 +30,8 @@ function getStatusLabel(status: string): string {
 function getStatusClass(status: string): string {
   if (status === "Published")
     return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+  if (status === "Approved")
+    return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
   if (status === "PendingApproval")
     return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
   if (status === "Rejected")
@@ -39,6 +43,11 @@ export const EventListPage = () => {
   const [events, setEvents] = useState<ManagedEventResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +70,37 @@ export const EventListPage = () => {
     };
   }, []);
 
+  const handlePublish = async (ev: ManagedEventResponse) => {
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn công khai sự kiện "${ev.title}" lên trang chủ không? Sau khi công khai, khách hàng có thể xem và đặt vé.`
+    );
+    if (!confirmed) return;
+
+    setPublishingId(ev.id);
+    setActionMessage(null);
+    try {
+      const updated = await publishEvent(ev.id);
+      setEvents((prev) =>
+        prev.map((item) =>
+          item.id === ev.id ? { ...item, status: updated.status } : item
+        )
+      );
+      setActionMessage({
+        type: "success",
+        text: `Đã công khai sự kiện "${ev.title}" thành công! Sự kiện hiện đã có mặt trên trang chủ.`,
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { message?: string })?.message ?? "Không thể công khai sự kiện.";
+      setActionMessage({
+        type: "error",
+        text: msg,
+      });
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -78,6 +118,32 @@ export const EventListPage = () => {
           <span>Tạo sự kiện mới</span>
         </Link>
       </div>
+
+      {actionMessage && (
+        <div
+          className={`flex items-center justify-between p-4 rounded-xl text-xs ${
+            actionMessage.type === "success"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+              : "bg-red-500/10 text-red-400 border border-red-500/20"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionMessage.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            )}
+            <span>{actionMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setActionMessage(null)}
+            className="p-1 hover:opacity-75 transition-opacity"
+            title="Đóng"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
@@ -149,6 +215,22 @@ export const EventListPage = () => {
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-2">
+                        {ev.status === "Approved" && (
+                          <button
+                            type="button"
+                            onClick={() => handlePublish(ev)}
+                            disabled={publishingId === ev.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
+                            title="Công khai sự kiện lên trang chủ"
+                          >
+                            {publishingId === ev.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Globe className="w-3.5 h-3.5" />
+                            )}
+                            <span>Công khai</span>
+                          </button>
+                        )}
                         {ev.status === "Published" && (
                           <Link
                             to="/organizer/check-in"

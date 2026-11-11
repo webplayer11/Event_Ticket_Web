@@ -16,9 +16,11 @@ function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
     Draft: "Bản nháp",
     PendingApproval: "Chờ duyệt",
+    Approved: "Đã duyệt",
     Published: "Đang bán",
     Rejected: "Bị từ chối",
     Cancelled: "Đã hủy",
+    Completed: "Đã kết thúc",
   };
   return map[status] ?? status;
 }
@@ -26,6 +28,8 @@ function getStatusLabel(status: string): string {
 function getStatusClass(status: string): string {
   if (status === "Published")
     return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+  if (status === "Approved")
+    return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
   if (status === "PendingApproval")
     return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
   if (status === "Rejected")

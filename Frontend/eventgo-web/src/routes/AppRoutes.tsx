@@ -37,6 +37,7 @@ export const AppRoutes = () => {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/my-tickets" element={<MyTicketsPage />} />
+        <Route path="/my-events" element={<Navigate to="/organizer/events" replace />} />
         <Route path="/account" element={<AccountPage />} />
       </Route>
 
