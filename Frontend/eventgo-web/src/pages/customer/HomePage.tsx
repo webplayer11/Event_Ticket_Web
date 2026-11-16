@@ -262,7 +262,7 @@ export const HomePage = () => {
     if (heroSlides.length <= 1) return;
     const timer = setInterval(() => {
       setHeroIndex((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
+    }, 4000);
     return () => clearInterval(timer);
   }, [heroSlides.length, heroIndex]);
 
