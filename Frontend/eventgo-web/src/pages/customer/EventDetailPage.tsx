@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Calendar,
   MapPin,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getPublishedEventById } from "../../services/eventService";
 import type { EventResponse, TicketTypeResponse } from "../../types";
+import { useAuthStore } from "../../stores/useAuthStore";
 
 function formatEventDate(startsAt: string): string {
   const d = new Date(startsAt);
@@ -26,6 +27,8 @@ function formatEventDate(startsAt: string): string {
 export const EventDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuthStore();
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -230,11 +233,15 @@ export const EventDetailPage = () => {
 
                   <button
                     disabled={!currentTier || currentTier.availableQuantity === 0}
-                    onClick={() =>
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        navigate("/login", { state: { from: location } });
+                        return;
+                      }
                       navigate("/checkout", {
                         state: { event, tier: currentTier, quantity, totalPrice },
-                      })
-                    }
+                      });
+                    }}
                     className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
                   >
                     <span>Tiến hành đặt vé</span>

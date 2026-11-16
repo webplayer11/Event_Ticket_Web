@@ -3,9 +3,36 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 
 let accessToken: string | null = null;
+let refreshToken: string | null = null;
+
+type TokenRefreshListener = (accessToken: string, refreshToken: string) => void;
+type AuthFailureListener = () => void;
+
+let onTokenRefreshListener: TokenRefreshListener | null = null;
+let onAuthFailureListener: AuthFailureListener | null = null;
 
 export function setAccessToken(token: string | null) {
     accessToken = token;
+}
+
+export function setRefreshToken(token: string | null) {
+    refreshToken = token;
+}
+
+export function getAccessToken(): string | null {
+    return accessToken;
+}
+
+export function getRefreshToken(): string | null {
+    return refreshToken;
+}
+
+export function setAuthListeners(listeners: {
+    onTokenRefresh?: TokenRefreshListener;
+    onAuthFailure?: AuthFailureListener;
+}) {
+    if (listeners.onTokenRefresh) onTokenRefreshListener = listeners.onTokenRefresh;
+    if (listeners.onAuthFailure) onAuthFailureListener = listeners.onAuthFailure;
 }
 
 export class ApiError extends Error {
@@ -18,9 +45,62 @@ export class ApiError extends Error {
     }
 }
 
+export interface CustomRequestInit extends RequestInit {
+    _isRetry?: boolean;
+}
+
+// Singleton promise mutex to ensure only ONE refresh request is in flight at any given time.
+let refreshTokenPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+    if (refreshTokenPromise) {
+        return refreshTokenPromise;
+    }
+
+    refreshTokenPromise = (async () => {
+        try {
+            if (!refreshToken) {
+                return null;
+            }
+
+            const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ refreshToken }),
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const data = (await response.json()) as {
+                accessToken?: string;
+                refreshToken?: string;
+            };
+
+            if (data?.accessToken && data?.refreshToken) {
+                accessToken = data.accessToken;
+                refreshToken = data.refreshToken;
+                onTokenRefreshListener?.(data.accessToken, data.refreshToken);
+                return data.accessToken;
+            }
+
+            return null;
+        } catch {
+            return null;
+        } finally {
+            refreshTokenPromise = null;
+        }
+    })();
+
+    return refreshTokenPromise;
+}
+
 export async function api<T>(
     path: string,
-    options: RequestInit = {},
+    options: CustomRequestInit = {},
 ): Promise<T> {
     const headers = new Headers(options.headers);
 
@@ -44,6 +124,36 @@ export async function api<T>(
             "Không kết nối được API. Kiểm tra BE, địa chỉ API, HTTPS và CORS.",
             0,
         );
+    }
+
+    // Handle 401 Unauthorized with automatic refresh token rotation
+    if (response.status === 401) {
+        const isAuthEndpoint =
+            path.includes("/auth/login") ||
+            path.includes("/auth/refresh-token") ||
+            path.includes("/auth/register");
+
+        if (!isAuthEndpoint && !options._isRetry && refreshToken) {
+            const newAccessToken = await refreshAccessToken();
+            if (newAccessToken) {
+                const retryHeaders = new Headers(options.headers);
+                if (options.body !== undefined && !(options.body instanceof FormData)) {
+                    retryHeaders.set("Content-Type", "application/json");
+                }
+                retryHeaders.set("Authorization", `Bearer ${newAccessToken}`);
+
+                return api<T>(path, {
+                    ...options,
+                    headers: retryHeaders,
+                    _isRetry: true,
+                });
+            } else {
+                // Refresh token expired or revoked - clear tokens and inform listeners
+                accessToken = null;
+                refreshToken = null;
+                onAuthFailureListener?.();
+            }
+        }
     }
 
     const text = await response.text();

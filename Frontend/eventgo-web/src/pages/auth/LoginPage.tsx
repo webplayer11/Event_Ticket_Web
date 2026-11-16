@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Lock, Mail, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
-import { api, ApiError, setAccessToken } from "../../services/api";
+import { api, ApiError, setAccessToken, setRefreshToken } from "../../services/api";
 import { UserRole } from "../../types";
 
 type BackendAuthResponse = {
   accessToken: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: string;
   tokenType: string;
   expiresAt: string;
   user: {
@@ -46,6 +48,9 @@ export const LoginPage = () => {
       });
 
       setAccessToken(auth.accessToken);
+      if (auth.refreshToken) {
+        setRefreshToken(auth.refreshToken);
+      }
 
       // Xác định quyền thực tế của người dùng từ hệ thống
       let determinedRole: UserRole = "Customer";
@@ -73,7 +78,8 @@ export const LoginPage = () => {
           role: determinedRole,
           phoneNumber: auth.user.phoneNumber,
         },
-        auth.accessToken
+        auth.accessToken,
+        auth.refreshToken
       );
 
       // Điều hướng: nếu có trang đích trước đó (ví dụ từ /organizer) thì quay lại đó

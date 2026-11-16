@@ -35,10 +35,16 @@ export const AppRoutes = () => {
       <Route element={<CustomerLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/my-tickets" element={<MyTicketsPage />} />
         <Route path="/my-events" element={<Navigate to="/organizer/events" replace />} />
-        <Route path="/account" element={<AccountPage />} />
+      </Route>
+
+      {/* 1b. AUTHENTICATED CUSTOMER ROUTES */}
+      <Route element={<RoleProtectedRoute />}>
+        <Route element={<CustomerLayout />}>
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/my-tickets" element={<MyTicketsPage />} />
+          <Route path="/account" element={<AccountPage />} />
+        </Route>
       </Route>
 
       {/* 2. AUTHENTICATION ROUTES */}

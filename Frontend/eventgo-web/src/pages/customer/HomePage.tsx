@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import AccountPanel from "../../components/AccountPanel";
 import { getPublishedEvents, getEventCategories } from "../../services/eventService";
 import type { EventResponse, EventCategoryResponse } from "../../types";
+import { useAuthStore } from "../../stores/useAuthStore";
 
 // -------- Helpers --------
 function formatEventDate(startsAt: string): string {
@@ -155,9 +156,11 @@ function RenderEventImage({
 // -------- Main Component --------
 export const HomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(urlQuery);
+  const { isAuthenticated } = useAuthStore();
 
   // API data
   const [events, setEvents] = useState<EventResponse[]>([]);
@@ -744,6 +747,11 @@ export const HomePage = () => {
                 <button
                   className="button primary"
                   onClick={() => {
+                    if (!isAuthenticated) {
+                      setSelectedEvent(null);
+                      navigate("/login", { state: { from: location } });
+                      return;
+                    }
                     setSelectedEvent(null);
                     navigate(`/events/${selectedEvent.id}`);
                   }}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
-import { api, ApiError, setAccessToken } from "../services/api";
+import { api, ApiError, setAccessToken, setRefreshToken } from "../services/api";
+import { useAuthStore } from "../stores/useAuthStore";
 
 type UserResponse = {
   id: string;
@@ -11,6 +12,8 @@ type UserResponse = {
 
 type AuthResponse = {
   accessToken: string;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: string;
   tokenType: string;
   expiresAt: string;
   user: UserResponse;
@@ -51,8 +54,22 @@ export default function AccountPanel({
     }
   }, [initialEmail]);
 
+  useEffect(() => {
+    const storeUser = useAuthStore.getState().user;
+    if (storeUser && !user) {
+      setUser({
+        id: storeUser.id,
+        fullName: storeUser.fullName,
+        email: storeUser.email,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }, [open]);
+
   function clearSession() {
     setAccessToken(null);
+    setRefreshToken(null);
+    useAuthStore.getState().logout();
     setUser(null);
     setOrganizations([]);
     setOrganizationsLoaded(false);
@@ -111,6 +128,9 @@ export default function AccountPanel({
       });
 
       setAccessToken(auth.accessToken);
+      if (auth.refreshToken) {
+        setRefreshToken(auth.refreshToken);
+      }
 
       // Kiểm tra token thật sự dùng được trên endpoint bảo vệ.
       let currentUser: UserResponse;
@@ -119,8 +139,20 @@ export default function AccountPanel({
         currentUser = await api<UserResponse>("/auth/me");
       } catch (caught) {
         setAccessToken(null);
+        setRefreshToken(null);
         throw caught;
       }
+
+      useAuthStore.getState().login(
+        {
+          id: currentUser.id,
+          email: currentUser.email,
+          fullName: currentUser.fullName,
+          role: "Customer",
+        },
+        auth.accessToken,
+        auth.refreshToken
+      );
 
       setUser(currentUser);
       onUserChange(currentUser.fullName);
