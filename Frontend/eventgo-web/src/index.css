@@ -304,13 +304,18 @@ input:focus-visible {
 }
 
 .hero h1 {
-  max-width: 760px;
-  margin: 22px 0 18px;
-  font-size: clamp(54px, 7vw, 102px);
-  line-height: .94;
-  letter-spacing: -.065em;
-  text-transform: uppercase;
-  white-space: pre-line;
+  max-width: 820px;
+  margin: 18px 0 20px;
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1.22;
+  letter-spacing: -.02em;
+  white-space: normal;
+  cursor: pointer;
+  transition: color .2s ease;
+}
+
+.hero h1:hover {
+  color: var(--lime);
 }
 
 .hero p {
@@ -380,11 +385,28 @@ input:focus-visible {
   padding: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, .35);
+  cursor: pointer;
+  transition: width .3s ease, background-color .3s ease;
 }
 
 .hero-dots .active {
   width: 54px;
   background: var(--lime);
+}
+
+@keyframes heroFadeIn {
+  from {
+    opacity: 0.7;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-slide-anim {
+  animation: heroFadeIn 0.35s ease-out;
 }
 
 .hero-index {
@@ -1917,8 +1939,9 @@ input:focus-visible {
   }
 
   .hero h1 {
-    margin-top: 17px;
-    font-size: 50px;
+    margin-top: 14px;
+    font-size: clamp(22px, 5.5vw, 32px);
+    line-height: 1.25;
   }
 
   .hero p {

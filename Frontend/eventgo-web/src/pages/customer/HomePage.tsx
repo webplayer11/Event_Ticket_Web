@@ -235,9 +235,10 @@ export const HomePage = () => {
     });
   }, [query, activeCategory, events]);
 
-  // Hero slides: first 3 events, or empty
+  // Hero slides: up to first 6 events for continuous loop
   const heroSlides = useMemo(() => {
-    const source = events.slice(0, 3);
+    if (events.length === 0) return [];
+    const source = events.slice(0, Math.min(events.length, 6));
     return source.map((ev, i) => ({
       event: ev,
       kicker:
@@ -245,14 +246,24 @@ export const HomePage = () => {
           ? "Lựa chọn của EventGo"
           : i === 1
             ? "Sự kiện nổi bật"
-            : "Đang được quan tâm",
+            : i === 2
+              ? "Đang được quan tâm"
+              : (ev.categoryName || "Sự kiện hấp dẫn").toUpperCase(),
       headline: ev.title,
-      note: ev.description.slice(0, 100) + (ev.description.length > 100 ? "..." : ""),
       shortDate: formatShortDate(ev.startsAt),
     }));
   }, [events]);
 
-  const hero = heroSlides[heroIndex] ?? null;
+  // Vòng lặp liên tục: tự chuyển sang sự kiện khác sau 3 giây
+  useEffect(() => {
+    if (heroSlides.length <= 1) return;
+    const timer = setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % heroSlides.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [heroSlides.length, heroIndex]);
+
+  const hero = heroSlides.length > 0 ? heroSlides[heroIndex % heroSlides.length] : null;
 
   const toggleLike = useCallback(
     (id: string) =>
@@ -320,32 +331,70 @@ export const HomePage = () => {
 
       {/* Hero Section */}
       {hero ? (
-        <section className="hero" id="top">
+        <section
+          className="hero cursor-pointer"
+          id="top"
+          onClick={(e) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest(".hero-dots")) {
+              setSelectedEvent(hero.event);
+            }
+          }}
+        >
           <div className="hero-fallback-bg" />
           <div className="hero-shade" />
-          <div className="hero-content shell">
+          <div className="hero-content shell hero-slide-anim" key={hero.event.id}>
             <div className="eyebrow">
               <span /> {hero.kicker}
             </div>
-            <h1>{hero.headline}</h1>
-            <p>{hero.note}</p>
+            <h1
+              className="hover:text-lime-300 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedEvent(hero.event);
+              }}
+              title="Xem chi tiết sự kiện này"
+            >
+              {hero.headline}
+            </h1>
             <div className="hero-actions">
-              <a className="button primary" href="#events">
-                Khám phá ngay <Icon name="arrow" />
-              </a>
-              <span>
+              <button
+                type="button"
+                className="button primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEvent(hero.event);
+                }}
+              >
+                Xem chi tiết vé <Icon name="arrow" />
+              </button>
+              <span
+                className="hover:opacity-85 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEvent(hero.event);
+                }}
+                title="Xem chi tiết sự kiện này"
+              >
                 <b>{hero.shortDate}</b>
                 <small>{hero.event.venueName}, {hero.event.city}</small>
               </span>
             </div>
             {heroSlides.length > 1 && (
-              <div className="hero-dots" aria-label="Chọn banner">
+              <div
+                className="hero-dots"
+                aria-label="Chọn banner"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {heroSlides.map((slide, index) => (
                   <button
                     key={slide.event.id}
                     aria-label={`Banner ${index + 1}`}
-                    className={heroIndex === index ? "active" : ""}
-                    onClick={() => setHeroIndex(index)}
+                    className={(heroIndex % heroSlides.length) === index ? "active" : ""}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHeroIndex(index);
+                    }}
                   />
                 ))}
               </div>
@@ -353,7 +402,7 @@ export const HomePage = () => {
           </div>
           {heroSlides.length > 1 && (
             <span className="hero-index">
-              0{heroIndex + 1} / 0{heroSlides.length}
+              0{(heroIndex % heroSlides.length) + 1} / 0{heroSlides.length}
             </span>
           )}
         </section>
